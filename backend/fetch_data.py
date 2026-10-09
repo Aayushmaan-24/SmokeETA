@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 """
-Fetch real-time data for Smoke ETA: FIRMS fires, wind grid, and AQI by zone.
+Fetch real-time or replay data for Smoke ETA: FIRMS fires, wind grid, and AQI by zone.
 Resolves paths relative to the project root.
+
+Usage:
+    python backend/fetch_data.py           # Fetch live data (last 2 days)
+    python backend/fetch_data.py --replay 2025-11-01  # Fetch 3-day archive (2025-10-30 to 2025-11-01)
 """
 
+import argparse
 import json
 import os
 import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -27,24 +33,40 @@ CLIENT = httpx.Client(
 )
 
 
-def fetch_fires() -> list[dict[str, Any]]:
+def fetch_fires(replay_date: str | None = None) -> list[dict[str, Any]]:
     """
     Fetch FIRMS VIIRS fires from NASA.
     - Reads FIRMS_KEY from .env
-    - Queries last 2 days over bbox (west,south,east,north): 73.5,27.5,78.5,32.5
+    - Queries last 2 days (live) or 3-day window (replay) over bbox (west,south,east,north): 73.5,27.5,78.5,32.5
     - Filters confidence n (nominal) or h (high)
     - Returns list of {lat, lon, frp, confidence, acq_date, acq_time}
+
+    Args:
+        replay_date: If set (YYYY-MM-DD), fetch archive for 3-day window ending on that date.
     """
     key = os.getenv("FIRMS_KEY")
     if not key:
         print("ERROR: FIRMS_KEY not set in .env")
         sys.exit(1)
 
-    url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/73.5,27.5,78.5,32.5/2"
+    if replay_date:
+        # Archive: VIIRS_SNPP_SP (Standard Product, 3+ days old)
+        # Format: /VIIRS_SNPP_SP/bbox/day_range/start_date
+        end = datetime.strptime(replay_date, "%Y-%m-%d")
+        start = end - timedelta(days=2)
+        url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_SP/73.5,27.5,78.5,32.5/3/{start.strftime('%Y-%m-%d')}"
+        params = {}
+        print(f"Fetching replay fires for {start.date()} to {end.date()}...")
+        print(f"URL: {url}")
+    else:
+        # Live: NRT (Near Real Time, last 2 days)
+        url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/73.5,27.5,78.5,32.5/2"
+        params = {}
+        print("Fetching live fires (last 2 days)...")
 
     for attempt in range(3):
         try:
-            resp = CLIENT.get(url)
+            resp = CLIENT.get(url, params=params if params else None)
             resp.raise_for_status()
             break
         except httpx.HTTPError as e:
@@ -57,6 +79,9 @@ def fetch_fires() -> list[dict[str, Any]]:
                 return []
 
     text = resp.text.strip()
+    # Debug: print first 300 chars
+    print(f"Response (first 300 chars): {text[:300]}")
+
     # Check if response is an error message (usually contains 'error' or lacks CSV header)
     if "error" in text.lower() or not text.startswith("latitude"):
         print(f"ERROR: FIRMS API returned error or invalid response:\n{text[:500]}")
@@ -84,10 +109,10 @@ def fetch_fires() -> list[dict[str, Any]]:
     return fires
 
 
-def fetch_wind() -> dict[str, Any]:
+def fetch_wind(replay_date: str | None = None) -> dict[str, Any]:
     """
     Build 8x8 lat/lon grid across lat 27.5-32.5, lon 73.5-78.5.
-    Query Open-Meteo hourly wind for 2 days, batch in groups of 16.
+    Query Open-Meteo hourly wind for 2 days (live) or 3-day archive window (replay).
 
     Returns:
     {
@@ -107,6 +132,17 @@ def fetch_wind() -> dict[str, Any]:
     lons = np.linspace(lon_min, lon_max, 8)
     grid_points = [(lat, lon) for lat in lats for lon in lons]  # 64 points
 
+    if replay_date:
+        # Historical archive: 3-day window
+        end = datetime.strptime(replay_date, "%Y-%m-%d")
+        start = end - timedelta(days=2)
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        print(f"Fetching historical wind for {start.date()} to {end.date()}...")
+    else:
+        # Live forecast: next 2 days
+        url = "https://api.open-meteo.com/v1/forecast"
+        print(f"Fetching live wind forecast (2 days)...")
+
     all_data = {}
     times = None
 
@@ -117,14 +153,18 @@ def fetch_wind() -> dict[str, Any]:
         lat_list = ",".join(str(pt[0]) for pt in batch)
         lon_list = ",".join(str(pt[1]) for pt in batch)
 
-        url = "https://api.open-meteo.com/v1/forecast"
         params = {
             "latitude": lat_list,
             "longitude": lon_list,
             "hourly": "wind_speed_10m,wind_direction_10m",
-            "forecast_days": 2,
             "timezone": "UTC",
         }
+
+        if replay_date:
+            params["start_date"] = (end - timedelta(days=2)).strftime("%Y-%m-%d")
+            params["end_date"] = end.strftime("%Y-%m-%d")
+        else:
+            params["forecast_days"] = 2
 
         for attempt in range(3):
             try:
@@ -190,7 +230,7 @@ def fetch_wind() -> dict[str, Any]:
     }
 
 
-def fetch_aqi() -> dict[str, dict[str, Any]]:
+def fetch_aqi(replay_date: str | None = None) -> dict[str, dict[str, Any]]:
     """
     Query Open-Meteo air-quality API for all zones in zones.json.
     One multi-location request with current PM2.5, PM10, US AQI and hourly data.
@@ -211,15 +251,32 @@ def fetch_aqi() -> dict[str, dict[str, Any]]:
     lat_list = ",".join(str(z["lat"]) for z in zones)
     lon_list = ",".join(str(z["lon"]) for z in zones)
 
-    url = "https://air-quality-api.open-meteo.com/v1/air-quality"
-    params = {
-        "latitude": lat_list,
-        "longitude": lon_list,
-        "current": "pm2_5,pm10,us_aqi",
-        "hourly": "pm2_5,us_aqi",
-        "forecast_days": 2,
-        "timezone": "UTC",
-    }
+    if replay_date:
+        # Historical archive
+        end = datetime.strptime(replay_date, "%Y-%m-%d")
+        start = end - timedelta(days=2)
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        print(f"Fetching historical AQI for {start.date()} to {end.date()}...")
+        params = {
+            "latitude": lat_list,
+            "longitude": lon_list,
+            "hourly": "pm2_5,us_aqi",
+            "start_date": start.strftime("%Y-%m-%d"),
+            "end_date": end.strftime("%Y-%m-%d"),
+            "timezone": "UTC",
+        }
+    else:
+        # Live forecast
+        url = "https://air-quality-api.open-meteo.com/v1/air-quality"
+        print(f"Fetching live AQI...")
+        params = {
+            "latitude": lat_list,
+            "longitude": lon_list,
+            "current": "pm2_5,pm10,us_aqi",
+            "hourly": "pm2_5,us_aqi",
+            "forecast_days": 2,
+            "timezone": "UTC",
+        }
 
     for attempt in range(3):
         try:
@@ -270,6 +327,7 @@ def fetch_aqi() -> dict[str, dict[str, Any]]:
 
 def save_json(data: Any, path: Path) -> bool:
     """Safely save JSON, preserving existing file on error."""
+    path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
@@ -281,27 +339,45 @@ def save_json(data: Any, path: Path) -> bool:
 
 def main():
     """Orchestrate data fetching and saving."""
-    # Create data directory if needed
-    data_dir = PROJECT_ROOT / "data"
-    data_dir.mkdir(exist_ok=True)
+    parser = argparse.ArgumentParser(
+        description="Fetch Smoke ETA data: fires, wind, AQI (live or replay archive)"
+    )
+    parser.add_argument(
+        "--replay",
+        type=str,
+        help="Replay mode: fetch 3-day archive ending on YYYY-MM-DD (e.g., 2025-11-01). "
+             "Saves to data/replay/ instead of data/",
+    )
+    args = parser.parse_args()
+
+    if args.replay:
+        # Replay mode: save to data/replay/
+        out_dir = PROJECT_ROOT / "data" / "replay"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Replay mode: saving to {out_dir}/")
+    else:
+        # Live mode: save to data/
+        out_dir = PROJECT_ROOT / "data"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print("Live mode: saving to data/")
 
     print("Fetching FIRMS fires...")
-    fires = fetch_fires()
-    if fires and save_json(fires, data_dir / "fires.json"):
+    fires = fetch_fires(replay_date=args.replay)
+    if fires and save_json(fires, out_dir / "fires.json"):
         print(f"✓ Saved {len(fires)} fires")
     elif not fires:
         print("✗ No fires fetched; existing file unchanged")
 
     print("\nFetching wind grid...")
-    wind = fetch_wind()
-    if wind.get("grid") and save_json(wind, data_dir / "wind.json"):
+    wind = fetch_wind(replay_date=args.replay)
+    if wind.get("grid") and save_json(wind, out_dir / "wind.json"):
         print(f"✓ Saved wind grid ({len(wind['grid'])} points)")
     else:
         print("✗ Wind fetch failed; existing file unchanged")
 
     print("\nFetching AQI by zone...")
-    aqi = fetch_aqi()
-    if aqi and save_json(aqi, data_dir / "aqi.json"):
+    aqi = fetch_aqi(replay_date=args.replay)
+    if aqi and save_json(aqi, out_dir / "aqi.json"):
         print(f"✓ Saved AQI for {len(aqi)} zones")
     else:
         print("✗ AQI fetch failed; existing file unchanged")

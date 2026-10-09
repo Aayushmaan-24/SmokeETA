@@ -93,8 +93,13 @@ LOCAL_FIRE_DISTANCE_KM = 30.0
 # Arrival threshold: fraction of total emitted mass in zone catchment
 ARRIVAL_MASS_THRESHOLD = 0.001  # 0.1% of total emitted mass
 
-# Severity thresholds: normalized influence score bands
-SEVERITY_THRESHOLDS = (0.02, 0.10, 0.30)   # Low / Moderate / High / Very High
+ARRIVAL_MASS_THRESHOLD = 0.001  # 0.1% of total emitted mass
+
+# Severity thresholds: normalized influence score bands (Low / Moderate / High / Very High).
+# Tuned on 2024-11-01 replay (high fire activity, favorable wind) to spread 11 zones across
+# severity buckets: ~3 zones per Low/Moderate/High/Very High. Based on 25th/50th/75th percentiles
+# of influence_score distribution to match real spatial/temporal dispersion patterns.
+SEVERITY_THRESHOLDS = (0.110, 0.113, 0.124)   # Low / Moderate / High / Very High
 
 DEFAULT_SEED = 42
 
@@ -733,11 +738,20 @@ def compute_zone_results(
             if d <= LOCAL_FIRE_DISTANCE_KM:
                 zone_local_fires[z["id"]].append(src)
 
-    # Compute total emitted mass (sum of per-source weight)
-    total_emitted_mass = sum(
-        s["frp_sum"] / (sum(ss["frp_sum"] for ss in sources) or 1.0)
-        for s in sources
-    )
+    # Compute total emitted mass from frame particle masses (same units used in zones).
+    # All particles are emitted with mass proportional to their source FRP weight.
+    # Take the maximum sum across frames to account for decay over time.
+    total_emitted_mass = 0.0
+    for frame in frames:
+        pmass = np.asarray(frame.get("mass", []))
+        if pmass.size > 0:
+            total_emitted_mass = max(total_emitted_mass, float(pmass.sum()))
+
+    # If frames are empty, estimate from sources as fallback.
+    if total_emitted_mass <= 0:
+        total_frp = sum(s["frp_sum"] for s in sources) or 1.0
+        total_emitted_mass = total_frp / (len(sources) or 1)
+
     arrival_threshold = ARRIVAL_MASS_THRESHOLD * total_emitted_mass
 
     hours = [fr["hour"] for fr in frames]
@@ -981,6 +995,8 @@ def main() -> int:
                         help=f"random seed (default {DEFAULT_SEED})")
     parser.add_argument("--data-dir", type=str, default=None,
                         help="override data directory (default: <project root>/data)")
+    parser.add_argument("--out", type=str, default=None,
+                        help="output file path (default: <data-dir>/sim.json)")
     parser.add_argument("--info", action="store_true", help="print output schema and exit")
     args = parser.parse_args()
 
@@ -995,7 +1011,8 @@ def main() -> int:
         print(f"ERROR: {e}")
         return 1
 
-    out_path = data_dir / "sim.json"
+    out_path = Path(args.out) if args.out else (data_dir / "sim.json")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(_clean(result), f, indent=1, allow_nan=False)
 

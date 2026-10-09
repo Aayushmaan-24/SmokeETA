@@ -346,5 +346,67 @@ class TestTransportPhysics(unittest.TestCase):
                            f"Downwind source should not arrive, got {result['status']}")
 
 
+class TestUnitConsistency(unittest.TestCase):
+    """Test that arrival threshold and accumulated mass use compatible units."""
+
+    def test_threshold_and_accumulated_mass_use_same_units(self):
+        """
+        Verify that arrival threshold calculation uses the same units as
+        per-zone accumulated mass (particle masses from frames).
+
+        A single source directly above a zone with enough particles should
+        produce arrival (accumulated mass crosses threshold), not be filtered
+        out by an incompatible unit mismatch.
+        """
+        # Single source at 29.0, 78.0
+        src = [{"lat": 29.0, "lon": 78.0, "frp_sum": 10.0, "n_fires": 1}]
+
+        # Zone directly above source
+        zones = [
+            {
+                "id": "test_z",
+                "name": "Test Zone",
+                "lat": 29.0,
+                "lon": 78.0,
+                "radius_km": 12.0,
+            }
+        ]
+
+        # Constant wind blows particles into zone (180° = south, so wind from north blows south)
+        wind_data = make_wind(times=25, speed_kmh=5.0, direction_deg=180.0)
+        wf = WindField(wind_data)
+
+        # Run simulation with enough particles to cross threshold
+        counts = [100]
+        sim_output = simulate_particles(src, counts, wf, seed=42)
+        frames = sim_output["frames"]
+
+        # Compute zone results
+        results = compute_zone_results(frames, zones, src)
+        zone_result = results[0]
+
+        # Key assertion: arrival_hour should NOT be None.
+        # (Before the fix, would always be None due to threshold being 56k× too large)
+        self.assertIsNotNone(
+            zone_result["arrival_hour"],
+            "Single source directly above zone should produce arrival; "
+            "threshold and accumulated mass must use compatible units",
+        )
+
+        # Secondary assertion: zone should have non-zero peak influence
+        self.assertGreater(
+            zone_result["peak_influence"],
+            0.0,
+            "Zone should have measurable peak influence from nearby source",
+        )
+
+        # Tertiary: at least some particles should have reached the zone
+        self.assertTrue(
+            zone_result["arrived"],
+            "Zone arrival flag should be True when threshold is crossed",
+        )
+
+
 if __name__ == "__main__":
+
     unittest.main()

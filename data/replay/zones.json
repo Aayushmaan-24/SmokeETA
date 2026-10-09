@@ -1,0 +1,79 @@
+[
+  {
+    "id": "bawana_dtu",
+    "name": "Bawana / DTU",
+    "lat": 28.75,
+    "lon": 77.12,
+    "radius_km": 12
+  },
+  {
+    "id": "narela",
+    "name": "Narela",
+    "lat": 28.85,
+    "lon": 77.09,
+    "radius_km": 12
+  },
+  {
+    "id": "rohini",
+    "name": "Rohini",
+    "lat": 28.75,
+    "lon": 77.06,
+    "radius_km": 12
+  },
+  {
+    "id": "mundka",
+    "name": "Mundka",
+    "lat": 28.68,
+    "lon": 77.03,
+    "radius_km": 12
+  },
+  {
+    "id": "wazirpur",
+    "name": "Wazirpur",
+    "lat": 28.70,
+    "lon": 77.17,
+    "radius_km": 12
+  },
+  {
+    "id": "connaught_place",
+    "name": "Connaught Place",
+    "lat": 28.63,
+    "lon": 77.22,
+    "radius_km": 12
+  },
+  {
+    "id": "anand_vihar",
+    "name": "Anand Vihar",
+    "lat": 28.65,
+    "lon": 77.32,
+    "radius_km": 12
+  },
+  {
+    "id": "dwarka",
+    "name": "Dwarka",
+    "lat": 28.59,
+    "lon": 77.05,
+    "radius_km": 12
+  },
+  {
+    "id": "rk_puram",
+    "name": "RK Puram",
+    "lat": 28.57,
+    "lon": 77.17,
+    "radius_km": 12
+  },
+  {
+    "id": "okhla",
+    "name": "Okhla",
+    "lat": 28.54,
+    "lon": 77.28,
+    "radius_km": 12
+  },
+  {
+    "id": "vasant_kunj",
+    "name": "Vasant Kunj",
+    "lat": 28.52,
+    "lon": 77.16,
+    "radius_km": 12
+  }
+]
