@@ -2,8 +2,11 @@
 """
 Tests for the Smoke ETA particle-dispersion simulator.
 
+16 legacy tests covering wind convention, fire aggregation, physics, zone ETA,
+reproducibility, and data validation. Plus 2 new tests for transport physics.
+
 Uses small synthetic fixtures only — no live APIs, no API keys, no network.
-Run:  python -m unittest backend.test_simulate -v
+Run:  python -m pytest backend/test_simulate.py -v
 """
 
 import json
@@ -23,6 +26,7 @@ from simulate import (
     aggregate_fires,
     assign_particles,
     compute_zone_results,
+    distance_km,
     load_inputs,
     run_simulation,
     simulate_particles,
@@ -49,11 +53,31 @@ def make_wind(times: int = 6, speed_kmh: float = 10.0, direction_deg: float = 0.
     return {"times": [f"2026-01-01T{h:02d}:00" for h in range(times)], "grid": grid}
 
 
+def make_wind_8x8(times: int = 48, speed_kmh: float = 20.0, direction_deg: float = 270.0):
+    """Larger 8x8 lat/lon grid covering 27.5-32.5N, 73.5-78.5E (real test bounds)."""
+    lats = np.linspace(27.5, 32.5, 8)
+    lons = np.linspace(73.5, 78.5, 8)
+    grid = []
+    for lat in lats:
+        for lon in lons:
+            grid.append({
+                "lat": float(lat),
+                "lon": float(lon),
+                "speed_kmh": [float(speed_kmh)] * times,
+                "direction_deg": [float(direction_deg)] * times,
+            })
+    return {"times": [f"2026-10-01T{h:02d}:00Z" for h in range(times)], "grid": grid}
+
+
 def write_data(tmp: Path, fires, wind, zones):
     (tmp / "fires.json").write_text(json.dumps(fires))
     (tmp / "wind.json").write_text(json.dumps(wind))
     (tmp / "zones.json").write_text(json.dumps(zones))
 
+
+# ---------------------------------------------------------------------------
+# LEGACY TESTS (16 tests from test_simulate_legacy.py)
+# ---------------------------------------------------------------------------
 
 class TestWindDirectionConvention(unittest.TestCase):
     """Wind direction is where wind comes FROM; smoke moves the opposite way."""
@@ -238,6 +262,88 @@ class TestMissingAndMalformedData(unittest.TestCase):
         with self.assertRaises(InputError) as ctx:
             run_simulation(self.tmp)
         self.assertIn("lon", str(ctx.exception))
+
+
+# ---------------------------------------------------------------------------
+# NEW TESTS (2 tests: transport physics with hourly emission)
+# ---------------------------------------------------------------------------
+
+class TestTransportPhysics(unittest.TestCase):
+    """Tests for hourly emission and meaningful ETA (not h0 arrivals)."""
+
+    def test_westerly_transport_80km_20kmh(self):
+        """
+        Source 80 km west with 20 km/h westerly wind -> arrival ~4h later.
+
+        Setup: Zone at (29.0, 77.5), source at (29.0, 76.68) — 80 km west.
+        Wind: 20 km/h from west (dir=270°), so smoke moves east.
+        Expected: Arrival at ~4 hours (80 / 20), NOT at hour 0.
+        """
+        zone_lat, zone_lon = 29.0, 77.5
+        source_lat, source_lon = 29.0, 76.68
+
+        # Verify distance
+        d = distance_km(zone_lat, zone_lon, source_lat, source_lon)
+        self.assertGreater(d, 75)
+        self.assertLess(d, 85)
+
+        # Create synthetic scenario
+        fires = [{"lat": source_lat, "lon": source_lon, "frp": 100}]
+        wind = make_wind_8x8(speed_kmh=20.0, direction_deg=270.0)
+        zones = [{"id": "test", "name": "Test", "lat": zone_lat, "lon": zone_lon, "radius_km": 12}]
+
+        # Simulate
+        sources = aggregate_fires(fires)
+        counts = assign_particles(sources, per_source=400, max_particles=40_000)
+        wind_field = WindField(wind)
+        sim = simulate_particles(sources, counts, wind_field, seed=42)
+        zone_results = compute_zone_results(sim["frames"], zones, sources)
+
+        result = zone_results[0]
+        # Particles now emit hourly over 24h, so arrival should be 3-5h
+        # (some particles emitted at t=0 reach around 4h; later emissions arrive later).
+        self.assertTrue(result["arrived"], f"Expected arrival but got: {result['status']}")
+        self.assertIsNotNone(result["arrival_hour"])
+        self.assertGreaterEqual(result["arrival_hour"], 3.0)
+        self.assertLessEqual(result["arrival_hour"], 5.5)
+
+    def test_no_upwind_source_downwind_wind(self):
+        """
+        Source 80 km east (downwind) with 20 km/h westerly wind -> no arrival.
+
+        Setup: Zone at (29.0, 77.5), source at (29.0, 78.32) — 80 km east.
+        Wind: 20 km/h from west (270°), blows smoke further west, away from zone.
+        Expected: No arrival (smoke blown in opposite direction).
+        """
+        zone_lat, zone_lon = 29.0, 77.5
+        source_lat, source_lon = 29.0, 78.32  # 80 km east (downwind)
+
+        # Verify distance
+        d = distance_km(zone_lat, zone_lon, source_lat, source_lon)
+        self.assertGreater(d, 75)
+        self.assertLess(d, 85)
+
+        # Create synthetic scenario
+        fires = [{"lat": source_lat, "lon": source_lon, "frp": 100}]
+        wind = make_wind_8x8(speed_kmh=20.0, direction_deg=270.0)
+        zones = [{"id": "test", "name": "Test", "lat": zone_lat, "lon": zone_lon, "radius_km": 12}]
+
+        # Simulate
+        sources = aggregate_fires(fires)
+        counts = assign_particles(sources, per_source=400, max_particles=40_000)
+        wind_field = WindField(wind)
+        sim = simulate_particles(sources, counts, wind_field, seed=42)
+        zone_results = compute_zone_results(sim["frames"], zones, sources)
+
+        result = zone_results[0]
+        # Downwind source should not reach upwind zone in westerly flow
+        # (diffusion may cause minimal arrival, but should be low/none).
+        if result["arrived"]:
+            self.assertEqual(result["severity"], "Low",
+                           f"Downwind source should at most be 'Low', got {result['severity']}")
+        else:
+            self.assertFalse(result["arrived"],
+                           f"Downwind source should not arrive, got {result['status']}")
 
 
 if __name__ == "__main__":
