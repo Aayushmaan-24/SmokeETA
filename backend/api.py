@@ -54,14 +54,18 @@ app.add_middleware(
 )
 
 
-def _load(name: str) -> object:
+def _load(name: str, mode: str = "live") -> object:
     """Load a data file relative to the project root with clear 404/500 errors."""
-    path = DATA_DIR / name
+    if mode == "replay":
+        path = DATA_DIR / "replay" / name
+    else:
+        path = DATA_DIR / name
     if not path.exists():
         raise HTTPException(
             status_code=404,
-            detail=f"{name} not found. Run 'python backend/fetch_data.py' and "
-            f"'python backend/simulate.py' first.",
+            detail=f"{name} not found in {mode} mode ({path}). "
+            f"Run 'python backend/fetch_data.py' (live) or "
+            f"'python backend/fetch_data.py --replay YYYY-MM-DD' (replay) first.",
         )
     try:
         with open(path, encoding="utf-8") as f:
@@ -81,8 +85,11 @@ def health() -> dict:
 
 
 @app.get("/api/sim")
-def get_sim() -> object:
-    return _load("sim.json")
+def get_sim(mode: str = "live") -> object:
+    """Get simulation results. mode=live|replay."""
+    if mode not in ("live", "replay"):
+        raise HTTPException(status_code=400, detail="mode must be 'live' or 'replay'")
+    return _load("sim.json", mode=mode)
 
 
 @app.get("/api/fires")

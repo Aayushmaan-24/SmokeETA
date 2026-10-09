@@ -1,0 +1,514 @@
+[
+  {
+    "date": "2024-10-20",
+    "belt_fires": 127,
+    "wind_from_deg": 97.40521549037868,
+    "mean_speed_kmh": 6.536458333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-21",
+    "belt_fires": 94,
+    "wind_from_deg": 63.822644600744816,
+    "mean_speed_kmh": 5.913541666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-22",
+    "belt_fires": 128,
+    "wind_from_deg": 21.062923969111278,
+    "mean_speed_kmh": 5.520833333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-23",
+    "belt_fires": 176,
+    "wind_from_deg": 324.3572721819295,
+    "mean_speed_kmh": 8.88125,
+    "favorable": true,
+    "score": 176
+  },
+  {
+    "date": "2024-10-24",
+    "belt_fires": 97,
+    "wind_from_deg": 314.89849300436697,
+    "mean_speed_kmh": 9.841666666666667,
+    "favorable": true,
+    "score": 97
+  },
+  {
+    "date": "2024-10-25",
+    "belt_fires": 150,
+    "wind_from_deg": 307.33797843756275,
+    "mean_speed_kmh": 9.112499999999999,
+    "favorable": true,
+    "score": 150
+  },
+  {
+    "date": "2024-10-26",
+    "belt_fires": 141,
+    "wind_from_deg": 50.31346791593473,
+    "mean_speed_kmh": 6.301041666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-27",
+    "belt_fires": 209,
+    "wind_from_deg": 120.32708057163427,
+    "mean_speed_kmh": 6.784375,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-28",
+    "belt_fires": 246,
+    "wind_from_deg": 124.68722709124913,
+    "mean_speed_kmh": 8.130208333333334,
+    "favorable": true,
+    "score": 246
+  },
+  {
+    "date": "2024-10-29",
+    "belt_fires": 169,
+    "wind_from_deg": 120.42032571971251,
+    "mean_speed_kmh": 7.096875,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-30",
+    "belt_fires": 163,
+    "wind_from_deg": 1.2268483158681567,
+    "mean_speed_kmh": 6.891666666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-10-31",
+    "belt_fires": 514,
+    "wind_from_deg": 299.83569651560913,
+    "mean_speed_kmh": 9.94375,
+    "favorable": true,
+    "score": 514
+  },
+  {
+    "date": "2024-11-01",
+    "belt_fires": 703,
+    "wind_from_deg": 303.98466773061693,
+    "mean_speed_kmh": 8.978124999999999,
+    "favorable": true,
+    "score": 703
+  },
+  {
+    "date": "2024-11-02",
+    "belt_fires": 550,
+    "wind_from_deg": 132.39655034285624,
+    "mean_speed_kmh": 5.724999999999999,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-03",
+    "belt_fires": 0,
+    "wind_from_deg": 335.1842961144197,
+    "mean_speed_kmh": 5.817708333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-04",
+    "belt_fires": 0,
+    "wind_from_deg": 276.3506827728549,
+    "mean_speed_kmh": 6.1000000000000005,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-05",
+    "belt_fires": 0,
+    "wind_from_deg": 103.07914832343019,
+    "mean_speed_kmh": 6.309375,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-06",
+    "belt_fires": 12,
+    "wind_from_deg": 161.1631722151926,
+    "mean_speed_kmh": 5.419791666666666,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-07",
+    "belt_fires": 581,
+    "wind_from_deg": 120.81102370477045,
+    "mean_speed_kmh": 5.511458333333334,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-08",
+    "belt_fires": 648,
+    "wind_from_deg": 128.61243207079252,
+    "mean_speed_kmh": 5.612500000000001,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-09",
+    "belt_fires": 336,
+    "wind_from_deg": 112.73669584960668,
+    "mean_speed_kmh": 7.180208333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-10",
+    "belt_fires": 197,
+    "wind_from_deg": 96.06405703490708,
+    "mean_speed_kmh": 5.504166666666666,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-11",
+    "belt_fires": 411,
+    "wind_from_deg": 134.6200903433562,
+    "mean_speed_kmh": 5.757291666666666,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-12",
+    "belt_fires": 165,
+    "wind_from_deg": 302.1390022495436,
+    "mean_speed_kmh": 6.290624999999999,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-13",
+    "belt_fires": 380,
+    "wind_from_deg": 296.63119430080525,
+    "mean_speed_kmh": 5.605208333333334,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-14",
+    "belt_fires": 20,
+    "wind_from_deg": 342.39248256790563,
+    "mean_speed_kmh": 5.2375,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-15",
+    "belt_fires": 88,
+    "wind_from_deg": 315.0073682535506,
+    "mean_speed_kmh": 6.84375,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-16",
+    "belt_fires": 185,
+    "wind_from_deg": 307.10886565437784,
+    "mean_speed_kmh": 6.082291666666666,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-17",
+    "belt_fires": 536,
+    "wind_from_deg": 312.12313151513064,
+    "mean_speed_kmh": 6.585416666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-18",
+    "belt_fires": 1107,
+    "wind_from_deg": 308.8849378560475,
+    "mean_speed_kmh": 6.075,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-19",
+    "belt_fires": 436,
+    "wind_from_deg": 304.1298410026574,
+    "mean_speed_kmh": 5.759375000000001,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2024-11-20",
+    "belt_fires": 176,
+    "wind_from_deg": 309.8771735657129,
+    "mean_speed_kmh": 5.333333333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-20",
+    "belt_fires": 180,
+    "wind_from_deg": 67.77802038271707,
+    "mean_speed_kmh": 4.234375,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-21",
+    "belt_fires": 135,
+    "wind_from_deg": 82.83698715828393,
+    "mean_speed_kmh": 4.270833333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-22",
+    "belt_fires": 93,
+    "wind_from_deg": 313.5154591274279,
+    "mean_speed_kmh": 7.032291666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-23",
+    "belt_fires": 83,
+    "wind_from_deg": 302.7198574238282,
+    "mean_speed_kmh": 5.598958333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-24",
+    "belt_fires": 64,
+    "wind_from_deg": 297.2362835125857,
+    "mean_speed_kmh": 4.057291666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-25",
+    "belt_fires": 156,
+    "wind_from_deg": 55.62897561727806,
+    "mean_speed_kmh": 4.197916666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-26",
+    "belt_fires": 226,
+    "wind_from_deg": 84.11390244649134,
+    "mean_speed_kmh": 3.2416666666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-27",
+    "belt_fires": 93,
+    "wind_from_deg": 114.41912058844848,
+    "mean_speed_kmh": 5.185416666666666,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-28",
+    "belt_fires": 67,
+    "wind_from_deg": 187.10020857267722,
+    "mean_speed_kmh": 4.15625,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-29",
+    "belt_fires": 191,
+    "wind_from_deg": 341.78024444453575,
+    "mean_speed_kmh": 5.923958333333334,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-30",
+    "belt_fires": 205,
+    "wind_from_deg": 122.92808304298944,
+    "mean_speed_kmh": 5.276041666666666,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-10-31",
+    "belt_fires": 335,
+    "wind_from_deg": 302.84238878453203,
+    "mean_speed_kmh": 5.830208333333334,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-01",
+    "belt_fires": 215,
+    "wind_from_deg": 295.9877397963345,
+    "mean_speed_kmh": 7.284375,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-02",
+    "belt_fires": 256,
+    "wind_from_deg": 292.65522785044647,
+    "mean_speed_kmh": 8.542708333333332,
+    "favorable": true,
+    "score": 256
+  },
+  {
+    "date": "2025-11-03",
+    "belt_fires": 224,
+    "wind_from_deg": 271.4453978215297,
+    "mean_speed_kmh": 6.873958333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-04",
+    "belt_fires": 295,
+    "wind_from_deg": 133.67736749719415,
+    "mean_speed_kmh": 10.424999999999999,
+    "favorable": true,
+    "score": 295
+  },
+  {
+    "date": "2025-11-05",
+    "belt_fires": 206,
+    "wind_from_deg": 324.20277389125954,
+    "mean_speed_kmh": 10.591666666666667,
+    "favorable": true,
+    "score": 206
+  },
+  {
+    "date": "2025-11-06",
+    "belt_fires": 222,
+    "wind_from_deg": 298.1893193291421,
+    "mean_speed_kmh": 9.9,
+    "favorable": true,
+    "score": 222
+  },
+  {
+    "date": "2025-11-07",
+    "belt_fires": 200,
+    "wind_from_deg": 294.8610873767239,
+    "mean_speed_kmh": 8.435416666666667,
+    "favorable": true,
+    "score": 200
+  },
+  {
+    "date": "2025-11-08",
+    "belt_fires": 285,
+    "wind_from_deg": 303.3747029023304,
+    "mean_speed_kmh": 7.210416666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-09",
+    "belt_fires": 363,
+    "wind_from_deg": 306.90394598896324,
+    "mean_speed_kmh": 7.676041666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-10",
+    "belt_fires": 307,
+    "wind_from_deg": 303.410016635778,
+    "mean_speed_kmh": 5.791666666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-11",
+    "belt_fires": 254,
+    "wind_from_deg": 313.43940627250686,
+    "mean_speed_kmh": 7.803124999999999,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-12",
+    "belt_fires": 8,
+    "wind_from_deg": 303.8227581089939,
+    "mean_speed_kmh": 7.378125000000001,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-13",
+    "belt_fires": 137,
+    "wind_from_deg": 304.96414235534013,
+    "mean_speed_kmh": 7.395833333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-14",
+    "belt_fires": 130,
+    "wind_from_deg": 304.1180085282582,
+    "mean_speed_kmh": 7.355208333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-15",
+    "belt_fires": 141,
+    "wind_from_deg": 307.69426494560605,
+    "mean_speed_kmh": 7.092708333333333,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-16",
+    "belt_fires": 176,
+    "wind_from_deg": 305.0795721409879,
+    "mean_speed_kmh": 7.054166666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-17",
+    "belt_fires": 61,
+    "wind_from_deg": 330.61579909883983,
+    "mean_speed_kmh": 4.221875,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-18",
+    "belt_fires": 61,
+    "wind_from_deg": 337.0928740993442,
+    "mean_speed_kmh": 4.944791666666667,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-19",
+    "belt_fires": 63,
+    "wind_from_deg": 100.093366682147,
+    "mean_speed_kmh": 2.6979166666666665,
+    "favorable": false,
+    "score": 0
+  },
+  {
+    "date": "2025-11-20",
+    "belt_fires": 54,
+    "wind_from_deg": 133.7525018983535,
+    "mean_speed_kmh": 3.1927083333333335,
+    "favorable": false,
+    "score": 0
+  }
+]
