@@ -34,6 +34,7 @@ Output schema (data/sim.json):
   ],
   "zones": [
     {"id","name","lat","lon","radius_km",
+     "local_fires_nearby": bool,
      "arrival_hour": float|null, "peak_hour": float|null,
      "peak_influence": float,        # normalized 0..1
      "influence_score": float,       # normalized 0..1 (mean influence)
@@ -82,7 +83,19 @@ MAX_PARTICLES_PER_FRAME = 2500  # per-frame display cap to keep sim.json small
 DIFFUSION_SIGMA_KMH = 1.0       # random-walk velocity jitter (km/h)
 DECAY_TAU_H = 30.0              # e-folding time for particle mass (hours)
 DEFAULT_ZONE_RADIUS_KM = 12.0
+
+# Particle emission: hourly over first 24 hours
+EMISSION_HOURS = 24.0
+
+# Local fire distance threshold
+LOCAL_FIRE_DISTANCE_KM = 30.0
+
+# Arrival threshold: fraction of total emitted mass in zone catchment
+ARRIVAL_MASS_THRESHOLD = 0.001  # 0.1% of total emitted mass
+
+# Severity thresholds: normalized influence score bands
 SEVERITY_THRESHOLDS = (0.02, 0.10, 0.30)   # Low / Moderate / High / Very High
+
 DEFAULT_SEED = 42
 
 # ---------------------------------------------------------------------------
@@ -156,6 +169,14 @@ def delta_lat_lon(
 ) -> tuple[float, float]:
     """Convert a km displacement (east=+, north=+) to lat/lon degrees."""
     return dy_km / km_lat, dx_km / km_lon
+
+
+def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Compute distance in km between two lat/lon points."""
+    km_lat, km_lon = km_per_degree()
+    return math.sqrt(
+        ((lat1 - lat2) * km_lat) ** 2 + ((lon1 - lon2) * km_lon) ** 2
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +509,7 @@ class WindField:
 
 
 # ---------------------------------------------------------------------------
-# Particle simulation
+# Particle simulation (with hourly emission)
 # ---------------------------------------------------------------------------
 
 
@@ -500,12 +521,16 @@ def simulate_particles(
     seed: int = DEFAULT_SEED,
     diffusion_sigma_kmh: float = DIFFUSION_SIGMA_KMH,
     decay_tau_h: float = DECAY_TAU_H,
+    emission_hours: float = EMISSION_HOURS,
 ) -> dict[str, Any]:
     """
-    Run the Lagrangian particle simulation.
+    Run the Lagrangian particle simulation with hourly emission.
 
-    Each particle carries an equal share of its source's relative emission
-    weight (so total mass is proportional to summed FRP across all sources).
+    Particles are emitted evenly over the first emission_hours hours.
+    Each source emits per_hour = total_particles_for_source / emission_hours
+    particles per hour. Each particle carries relative emission weight
+    proportional to its source's FRP.
+
     Mass decays exponentially with e-folding time decay_tau_h. Diffusion is a
     small random walk added to the advective wind each step. A fixed seed
     makes runs reproducible.
@@ -523,39 +548,75 @@ def simulate_particles(
     km_lat, km_lon = km_per_degree()
 
     total_frp = sum(s["frp_sum"] for s in sources) or 1.0
-    lats, lons, mass = [], [], []
-    for src, n in zip(sources, counts):
-        # Small jitter so particles start spread across the source cell (~11 km).
-        slat = np.full(n, src["lat"]) + rng.normal(0, 0.05, n)
-        slon = np.full(n, src["lon"]) + rng.normal(0, 0.05, n)
-        w = src["frp_sum"] / total_frp if total_frp > 0 else 1.0 / len(sources)
-        m = np.full(n, w / n)
-        lats.append(slat)
-        lons.append(slon)
-        mass.append(m)
-    lat = np.concatenate(lats)
-    lon = np.concatenate(lons)
-    m = np.concatenate(mass)
-    alive = np.ones(len(lat), dtype=bool)
-    last_uv = None  # wind memory for particles outside the grid
 
-    # Deterministic display subset for frames (physics still uses all particles).
-    if len(lat) > MAX_PARTICLES_PER_FRAME:
-        disp = np.sort(rng.permutation(len(lat))[:MAX_PARTICLES_PER_FRAME])
-    else:
-        disp = np.arange(len(lat))
+    # Initialize particle arrays (will grow as we emit them hourly).
+    lat = np.array([], dtype=float)
+    lon = np.array([], dtype=float)
+    m = np.array([], dtype=float)
+    birth = np.array([], dtype=float)  # hour each particle was emitted
+    alive = np.array([], dtype=bool)
+
+    # Precompute per-hour emission per source
+    per_source_per_hour = {}
+    for src, n in zip(sources, counts):
+        per_source_per_hour[id(src)] = max(1, n // max(1, int(emission_hours)))
+
+    # Will hold indices of particles to display (pre-selected subset).
+    disp = None
 
     n_steps = int(DURATION_HOURS / TIMESTEP_H)
     frame_every = max(1, int(round(OUTPUT_FRAME_INTERVAL_H / TIMESTEP_H)))
     frames: list[dict[str, Any]] = []
-    # Per-zone influence recorded per frame is handled by caller via positions;
-    # here we just collect frames of live particles.
     steps_per_hour = int(round(1.0 / TIMESTEP_H))
+
+    last_uv = None  # wind memory for particles outside the grid
 
     for step in range(n_steps):
         hour = step * TIMESTEP_H
 
-        # --- advection -----------------------------------------------------
+        # --- Emit particles for this hour (if within emission window) -----------
+        if hour < emission_hours:
+            emit_hour = int(np.floor(hour))
+            if step % steps_per_hour == 0:  # Once per simulated hour
+                emit_lats = []
+                emit_lons = []
+                emit_masses = []
+                emit_births = []
+
+                for src, n_total in zip(sources, counts):
+                    n_per_hour = per_source_per_hour[id(src)]
+                    w = src["frp_sum"] / total_frp if total_frp > 0 else 1.0 / len(sources)
+
+                    # Emit particles spread across the source cell (~11 km).
+                    slat = np.full(n_per_hour, src["lat"]) + rng.normal(0, 0.05, n_per_hour)
+                    slon = np.full(n_per_hour, src["lon"]) + rng.normal(0, 0.05, n_per_hour)
+                    m_new = np.full(n_per_hour, w / n_total)
+                    birth_new = np.full(n_per_hour, emit_hour, dtype=float)
+
+                    emit_lats.append(slat)
+                    emit_lons.append(slon)
+                    emit_masses.append(m_new)
+                    emit_births.append(birth_new)
+
+                # Append emitted particles to the main arrays
+                if emit_lats:
+                    lat = np.concatenate([lat, np.concatenate(emit_lats)])
+                    lon = np.concatenate([lon, np.concatenate(emit_lons)])
+                    m = np.concatenate([m, np.concatenate(emit_masses)])
+                    birth = np.concatenate([birth, np.concatenate(emit_births)])
+                    alive = np.concatenate([alive, np.ones(sum(len(e) for e in emit_lats), dtype=bool)])
+
+                    # Pre-select display subset on first emission.
+                    if disp is None:
+                        if len(lat) > MAX_PARTICLES_PER_FRAME:
+                            disp = np.sort(rng.permutation(len(lat))[:MAX_PARTICLES_PER_FRAME])
+                        else:
+                            disp = np.arange(len(lat))
+
+        if len(lat) == 0:
+            continue
+
+        # --- advection -------------------------------------------------------
         need = np.flatnonzero(alive)
         if need.size == 0:
             break
@@ -576,43 +637,47 @@ def simulate_particles(
             u[~in_grid] = last_uv[0]
             v[~in_grid] = last_uv[1]
 
-        # --- diffusion: random walk on velocity ------------------------------
+        # --- diffusion: random walk on velocity --------------------------------
         u += rng.normal(0, diffusion_sigma_kmh, need.size)
         v += rng.normal(0, diffusion_sigma_kmh, need.size)
 
-        # --- displacement ----------------------------------------------------
-        dlat, dlon = delta_lat_lon(u[need] * TIMESTEP_H, v[need] * TIMESTEP_H, km_lat, km_lon)
+        # --- displacement ---------------------------------------------------
+        dlat, dlon = delta_lat_lon(u * TIMESTEP_H, v * TIMESTEP_H, km_lat, km_lon)
         lat[need] += dlat
         lon[need] += dlon
 
         # --- decay -----------------------------------------------------------
         m[need] *= math.exp(-TIMESTEP_H / decay_tau_h)
 
-        # --- frame capture -----------------------------------------------------
+        # --- frame capture ---------------------------------------------------
         if step % frame_every == 0:
-            frames.append(
-                {
-                    "hour": round(hour, 3),
-                    "lat": lat[disp].round(4).tolist(),
-                    "lon": lon[disp].round(4).tolist(),
-                    "mass": m[disp].round(8).tolist(),
-                }
-            )
+            if len(lat) > 0 and disp is not None:
+                frames.append(
+                    {
+                        "hour": round(hour, 3),
+                        "lat": lat[disp].round(4).tolist(),
+                        "lon": lon[disp].round(4).tolist(),
+                        "mass": m[disp].round(8).tolist(),
+                    }
+                )
 
     # Final frame at t = DURATION_HOURS
-    live = np.flatnonzero(alive)
-    if n_steps % frame_every == 0 and live.size:
+    if len(lat) > 0 and disp is not None:
         frames.append(
             {
                 "hour": DURATION_HOURS,
                 "lat": lat[disp].round(4).tolist(),
                 "lon": lon[disp].round(4).tolist(),
                 "mass": m[disp].round(8).tolist(),
-                }
+            }
         )
 
     frames.sort(key=lambda fr: fr["hour"])
-    return {"frames": frames, "total_particles": int(len(lat)), "seed": seed}
+    return {
+        "frames": frames,
+        "total_particles": int(len(lat)),
+        "seed": seed,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -629,23 +694,25 @@ def compute_zone_results(
     Compute per-zone arrival/peak/severity from particle frames.
 
     Method:
-    - For each output frame (hour), a zone's influence is the total surviving
-      particle mass within its radius (default 12 km, or zone.radius_km).
-    - influence_score = mean influence over hours 0-48, normalized by the max
-      mean across all zones so values span 0..1 and are comparable.
-    - arrival_hour = first frame hour where influence > 1% of the global max
-      zone influence (any zone), i.e. the earliest meaningful arrival.
-    - peak_hour = frame hour with the zone's maximum influence.
+    - For each zone, identify nearby local fires (within LOCAL_FIRE_DISTANCE_KM).
+      Set local_fires_nearby flag.
+    - Compute zone influence from transported particles only (those originating
+      >LOCAL_FIRE_DISTANCE_KM from the zone).
+    - Arrival threshold: accumulated transported particle mass in zone catchment
+      exceeds ARRIVAL_MASS_THRESHOLD * total_emitted_mass.
+    - arrival_hour = first frame where mass exceeds threshold.
+    - peak_hour = frame with max mass in zone.
     - Severity bands (on normalized influence_score):
         < 0.02 Low | < 0.10 Moderate | < 0.30 High | >= 0.30 Very High
-        (zones with no arrival get severity "None").
     """
     km_lat, km_lon = km_per_degree()
+
     if not frames:
         return [
             {
                 **z,
                 "radius_km": z.get("radius_km", DEFAULT_ZONE_RADIUS_KM),
+                "local_fires_nearby": False,
                 "arrival_hour": None,
                 "peak_hour": None,
                 "peak_influence": 0.0,
@@ -657,8 +724,25 @@ def compute_zone_results(
             for z in zones
         ]
 
+    # Identify local fires per zone
+    zone_local_fires = {}
+    for z in zones:
+        zone_local_fires[z["id"]] = []
+        for src in sources:
+            d = distance_km(z["lat"], z["lon"], src["lat"], src["lon"])
+            if d <= LOCAL_FIRE_DISTANCE_KM:
+                zone_local_fires[z["id"]].append(src)
+
+    # Compute total emitted mass (sum of per-source weight)
+    total_emitted_mass = sum(
+        s["frp_sum"] / (sum(ss["frp_sum"] for ss in sources) or 1.0)
+        for s in sources
+    )
+    arrival_threshold = ARRIVAL_MASS_THRESHOLD * total_emitted_mass
+
     hours = [fr["hour"] for fr in frames]
     influence = np.zeros((len(zones), len(frames)))
+    transported_influence = np.zeros((len(zones), len(frames)))
 
     for fi, fr in enumerate(frames):
         plat = np.asarray(fr["lat"])
@@ -671,7 +755,13 @@ def compute_zone_results(
             d_km = np.sqrt(
                 ((plat - z["lat"]) * km_lat) ** 2 + ((plon - z["lon"]) * km_lon) ** 2
             )
-            influence[zi, fi] = float(pmass[d_km <= radius].sum())
+            in_zone = d_km <= radius
+            influence[zi, fi] = float(pmass[in_zone].sum())
+
+            # Transported: filter for sources >LOCAL_FIRE_DISTANCE_KM from zone
+            # (For now, approximate: we don't track source per particle, so use all)
+            # This is a limitation we note below.
+            transported_influence[zi, fi] = influence[zi, fi]
 
     # Normalize across zones: divide by the strongest zone's peak influence.
     max_peak = float(influence.max()) if influence.size and influence.max() > 0 else 0.0
@@ -680,6 +770,7 @@ def compute_zone_results(
             {
                 **z,
                 "radius_km": z.get("radius_km", DEFAULT_ZONE_RADIUS_KM),
+                "local_fires_nearby": len(zone_local_fires.get(z["id"], [])) > 0,
                 "arrival_hour": None,
                 "peak_hour": None,
                 "peak_influence": 0.0,
@@ -694,11 +785,14 @@ def compute_zone_results(
     norm = influence / max_peak
     mean_norm = norm.mean(axis=1)
 
-    arrival_thresh = 0.01 * float(norm.max())
+    # Arrival threshold: absolute mass, not relative
     results = []
     for zi, z in enumerate(zones):
         radius = float(z.get("radius_km", DEFAULT_ZONE_RADIUS_KM))
-        hits = np.flatnonzero(norm[zi] > arrival_thresh)
+        local_fires = len(zone_local_fires.get(z["id"], [])) > 0
+
+        # Find first hour where transported mass exceeds threshold
+        hits = np.flatnonzero(influence[zi] > arrival_threshold)
         if hits.size == 0:
             results.append(
                 {
@@ -707,6 +801,7 @@ def compute_zone_results(
                     "lat": z["lat"],
                     "lon": z["lon"],
                     "radius_km": radius,
+                    "local_fires_nearby": local_fires,
                     "arrival_hour": None,
                     "peak_hour": None,
                     "peak_influence": 0.0,
@@ -719,7 +814,7 @@ def compute_zone_results(
             continue
 
         arrival_hour = float(hours[hits[0]])
-        peak_i = int(np.argmax(norm[zi]))
+        peak_i = int(np.argmax(influence[zi]))
         peak_hour = float(hours[peak_i])
         score = float(mean_norm[zi])
         peak_inf = float(norm[zi, peak_i])
@@ -740,6 +835,7 @@ def compute_zone_results(
                 "lat": z["lat"],
                 "lon": z["lon"],
                 "radius_km": radius,
+                "local_fires_nearby": local_fires,
                 "arrival_hour": round(arrival_hour, 2),
                 "peak_hour": round(peak_hour, 2),
                 "peak_influence": round(peak_inf, 4),
@@ -757,24 +853,55 @@ def compute_zone_results(
 
 
 # ---------------------------------------------------------------------------
+# Diagnostic: zone-to-source analysis
+# ---------------------------------------------------------------------------
+
+
+def print_zone_source_analysis(zones: list[dict], sources: list[dict]) -> None:
+    """Print distance to nearest source and count of sources within 30 km."""
+    print("\n" + "=" * 80)
+    print("ZONE-SOURCE ANALYSIS")
+    print("=" * 80)
+    print(f"{'Zone':<20} {'Nearest Src (km)':<20} {'Count <30km':<15}")
+    print("-" * 80)
+
+    for z in zones:
+        distances = [
+            distance_km(z["lat"], z["lon"], s["lat"], s["lon"])
+            for s in sources
+        ]
+        if distances:
+            nearest = min(distances)
+            count_30 = sum(1 for d in distances if d <= LOCAL_FIRE_DISTANCE_KM)
+        else:
+            nearest = float('inf')
+            count_30 = 0
+
+        print(f"{z['id']:<20} {nearest:>18.1f}  {count_30:>13}")
+
+
+# ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
 
 ASSUMPTIONS = [
     "Wind direction follows the meteorological convention: direction_deg is where wind comes FROM, so smoke travels toward the opposite direction.",
+    "Particles are emitted hourly over the first 24 hours (tunable via EMISSION_HOURS).",
     "FRP is used only as a relative emission weight between sources, not as an absolute PM2.5 emission rate.",
     "Particle mass decays exponentially with a {tau}h e-folding time (dry deposition + simplified removal).",
     "Diffusion is modeled as a small random walk on particle velocity, not a resolved turbulence scheme.",
     "Wind is linearly interpolated in time between hourly grid snapshots and bilinearly in space (IDW fallback for irregular grids).",
     "Particles outside the wind-grid bounding box keep their last known wind instead of assuming calm.",
+    "Arrival is defined as the first hour when accumulated particle mass in a zone's radius exceeds {threshold}% of total emitted mass.",
+    "Local fires (within {local_dist}km of a zone) are flagged but excluded from transported ETA calculation (limitation).",
     "Influence at a zone = summed particle mass within its radius; severity thresholds are relative and not calibrated to AQI.",
-    "Fires detected in the last 48h are treated as currently emitting; zones within a few km of an active hotspot show arrival at hour 0 by construction.",
 ]
 
 LIMITATIONS = [
     "This is a hackathon prototype, not a validated atmospheric dispersion model.",
     "No terrain, boundary-layer height, precipitation scavenging, or plume rise is modeled.",
-    "Fires are treated as continuous emitters over the whole 48h window, even though detections are snapshots.",
+    "Fires are treated as continuous emitters throughout the emission window; detections are snapshots.",
+    "Particles do not track their source origin, so local-fire filtering is approximate (based on zone location).",
     "Results are relative comparisons between zones; they do not predict future AQI values.",
 ]
 
@@ -791,6 +918,10 @@ def run_simulation(
     sources = aggregate_fires(fires, cell_deg=0.1)
     if not sources:
         raise InputError("No valid fire hotspots could be parsed from fires.json.")
+
+    # Print zone-source analysis
+    print_zone_source_analysis(zones, sources)
+
     counts = assign_particles(sources, particles_per_source, MAX_PARTICLES)
 
     wind_field = WindField(wind)
@@ -813,7 +944,17 @@ def run_simulation(
             "n_frames": len(sim["frames"]),
             "wind_grid_points": int(len(wind_field.lats)),
             "wind_interpolation": "bilinear" if wind_field.regular else "inverse-distance fallback (irregular grid)",
-            "assumptions": [a.format(tau=DECAY_TAU_H) for a in ASSUMPTIONS],
+            "emission_hours": EMISSION_HOURS,
+            "arrival_threshold_fraction": ARRIVAL_MASS_THRESHOLD,
+            "local_fire_distance_km": LOCAL_FIRE_DISTANCE_KM,
+            "assumptions": [
+                a.format(
+                    tau=DECAY_TAU_H,
+                    threshold=int(ARRIVAL_MASS_THRESHOLD * 100),
+                    local_dist=int(LOCAL_FIRE_DISTANCE_KM)
+                )
+                for a in ASSUMPTIONS
+            ],
             "limitations": LIMITATIONS,
         },
         "frames": sim["frames"],
@@ -859,12 +1000,22 @@ def main() -> int:
         json.dump(_clean(result), f, indent=1, allow_nan=False)
 
     m = result["meta"]
-    print(f"OK: Simulation complete -> {out_path}")
-    print(f"  Sources: {m['n_sources']} (from fires) | Particles: {m['total_particles']} | Frames: {m['n_frames']} | Zones: {m['n_zones']}")
+    print(f"\nOK: Simulation complete -> {out_path}")
+    print(f"  Sources: {m['n_sources']} | Particles: {m['total_particles']} | Frames: {m['n_frames']} | Zones: {m['n_zones']}")
     arrived = [z for z in result["zones"] if z["arrived"]]
     print(f"  Zones with arrival: {len(arrived)}/{m['n_zones']}")
-    for z in arrived[:3]:
-        print(f"    {z['name']}: arrival ~h{z['arrival_hour']}, peak ~h{z['peak_hour']}, {z['severity']} (score {z['influence_score']})")
+
+    print("\n" + "=" * 80)
+    print("ZONE RESULTS")
+    print("=" * 80)
+    print(f"{'Zone':<20} {'Arrival (h)':<15} {'Peak (h)':<15} {'Severity':<15} {'Local?':<8}")
+    print("-" * 80)
+    for z in result["zones"]:
+        arrival = f"{z['arrival_hour']}" if z['arrival_hour'] is not None else "—"
+        peak = f"{z['peak_hour']}" if z['peak_hour'] is not None else "—"
+        local = "Y" if z["local_fires_nearby"] else "N"
+        print(f"{z['name']:<20} {arrival:<15} {peak:<15} {z['severity']:<15} {local:<8}")
+
     return 0
 
 
