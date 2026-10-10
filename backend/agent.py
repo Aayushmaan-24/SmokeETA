@@ -308,9 +308,34 @@ _FALLBACK_TEMPLATES: dict[str, tuple[str, str]] = {
     ),
 }
 
+_HI_SEV = {"Low": "कम", "Moderate": "मध्यम", "High": "उच्च",
+           "Very High": "बहुत उच्च", "None": "कोई नहीं"}
+_HI_ADVICE = {
+    "school": "अगर प्रभाव उच्च या बहुत उच्च है, तो बाहरी खेल टाल दें; वरना खेल जल्दी करवा लें।",
+    "asthma": "अस्थमा हो तो चरम समय में खिड़कियाँ बंद रखें और बाहर कम निकलें; निजी सलाह के लिए डॉक्टर से मिलें।",
+    "outdoor_worker": "बाहर का भारी काम पहले निपटा लें और चरम समय में घर के अंदर आराम करें।",
+    "commuter": "चरम समय से बाहर यात्रा करें और वाहन की खिड़कियाँ बंद रखें।",
+}
+
+def _build_fallback_hi(zone_id, eta, mode, persona):
+    name = eta.get("zone_name") or zone_id
+    sev = _HI_SEV.get(eta.get("severity", "None"), "अज्ञात")
+    a, p = eta.get("arrival_hour"), eta.get("peak_hour")
+    a_txt = f"{a:.0f}" if isinstance(a, (int, float)) else "अनुमानित नहीं"
+    p_txt = f"{p:.0f}" if isinstance(p, (int, float)) else "अनुमानित नहीं"
+    local = " आस-पास स्थानीय आग भी सक्रिय है।" if eta.get("local_fires_nearby") else ""
+    note = ("यह 2024-11-01 की पिछली घटना पर आधारित अनुमान है, लाइव पूर्वानुमान नहीं।"
+            if mode == "replay" else
+            "यह सापेक्ष अनुमान है, स्वास्थ्य पूर्वानुमान नहीं।")
+    advice = _HI_ADVICE.get(persona, _HI_ADVICE["commuter"])
+    return (f"{name}: धुआँ लगभग घंटा {a_txt} पर पहुँचेगा और घंटा {p_txt} के आस-पास "
+            f"चरम पर होगा। सापेक्ष प्रभाव: {sev}।{local} {advice} {note}")
+
 
 def _build_fallback(zone_id: str, eta: dict, mode: str, persona: str, lang: str) -> str:
     """Build a short persona-aware alert from smoke_eta numbers."""
+    if lang == "hi":
+        return _build_fallback_hi(zone_id, eta, mode, persona)
     severity = eta.get("severity", "Unknown")
     arrival = eta.get("arrival_hour")
     peak = eta.get("peak_hour")
@@ -419,6 +444,16 @@ def _tools_from_messages(agent) -> list[str]:
         pass
     return names
 
+def _grounded(answer: str, eta: dict, zone) -> bool:
+    """Accept the agent's answer only if it states the real arrival hour."""
+    if not zone:
+        return True  # ranking path is checked via tools_used instead
+    a = eta.get("arrival_hour")
+    if not isinstance(a, (int, float)):
+        return True
+    n = str(int(a))
+    dev = n.translate(str.maketrans("0123456789", "०१२३४५६७८९"))
+    return n in answer or dev in answer
 
 def ask(question, zone=None, persona="commuter", lang="en",
         mode="replay", timeout_s=90):
@@ -448,13 +483,19 @@ def ask(question, zone=None, persona="commuter", lang="en",
     executor = ThreadPoolExecutor(max_workers=1)
     try:
         agent = _build_agent()
-        prompt = _build_user_prompt(question, zone, persona, lang, mode)
+        facts = ""
+        if zone:
+            facts = (f"FACTS (from the smoke simulation, use these exact numbers): "
+                     f"zone={eta.get('zone_name')}, arrival_hour={eta.get('arrival_hour')}, "
+                     f"peak_hour={eta.get('peak_hour')}, severity={eta.get('severity')}.\n")
+        prompt = facts + _build_user_prompt(question, zone, persona, lang, mode)
         future = executor.submit(_run_agent_turn, agent, prompt)
         response = future.result(timeout=timeout_s)   # raises on timeout
         answer = _extract_answer(response)
-        if answer:
-            return {"answer": answer, "tools_used": _tools_from_messages(agent),
-                    "source": "agent"}
+        tools = _tools_from_messages(agent)
+        ok = _grounded(answer or "", eta, zone) if zone else bool(tools)
+        if answer and ok:
+            return {"answer": answer, "tools_used": tools, "source": "agent"}
     except Exception:
         pass   # timeout, Ollama down, model error -> fallback below
     finally:
