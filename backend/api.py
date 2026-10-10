@@ -28,6 +28,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
 
 # Allow importing the existing simulator module (backend/ has no __init__.py,
 # so add it to sys.path directly).
@@ -35,10 +37,52 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import simulate as sim_mod  # noqa: E402
 
+# The Strands agent lives in backend/agent.py (same package).
+import agent as agent_mod  # noqa: E402
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
 app = FastAPI(title="Smoke ETA API", version="0.1.0")
+
+class _AskBody(BaseModel):
+    question: str
+    zone: Optional[str] = None
+    persona: str = "commuter"
+    lang: str = "en"
+    mode: str = "replay"
+
+    # Validate mode at the Pydantic level so bogus values are rejected.
+    @staticmethod
+    def _validate_mode(v):
+        if v not in ("live", "replay"):
+            raise ValueError("mode must be 'live' or 'replay'")
+        return v
+
+    _validate_mode = __import__("pydantic").field_validator("mode")(_validate_mode)
+
+
+@app.post("/api/ask")
+def ask_endpoint(body: _AskBody) -> dict:
+    """
+    Ask the Smoke ETA agent a question.
+
+    Body (JSON): {question, zone, persona, lang, mode}
+    Returns the ask() result: {answer, tools_used, source}.
+    """
+    try:
+        result = agent_mod.ask(
+            question=body.question,
+            zone=body.zone,
+            persona=body.persona,
+            lang=body.lang,
+            mode=body.mode,
+        )
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Agent error: {e}")
+    return result
+
 
 # CORS for local frontend dev servers (Vite default ports).
 app.add_middleware(
