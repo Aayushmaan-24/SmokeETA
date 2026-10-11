@@ -49,23 +49,26 @@ export default function ParticleLayer({ frames, hour }) {
       if (!frame || !frame.lat?.length) return
 
       // Map geographic coords -> canvas pixels for the current view.
-      const nw = map.containerPointToLatLng([0, 0])
-      const se = map.containerPointToLatLng([size.x, size.y])
-      const dLat = nw.lat - se.lat
-      const dLon = se.lon - nw.lon
-      if (dLat <= 0 || dLon <= 0) return
-      const pxPerLon = size.x / dLon
-      const pxPerLat = size.y / dLat
-
+      // Use Leaflet's own projection so particles land in the right place.
+      let maxMass = 0
+      for (let i = 0; i < frame.mass.length; i++) {
+        if (frame.mass[i] > maxMass) maxMass = frame.mass[i]
+      }
+      if (maxMass <= 0) maxMass = 1
+  
       for (let i = 0; i < frame.lat.length; i++) {
-        const x = (frame.lon[i] - nw.lon) * pxPerLon
-        const y = (nw.lat - frame.lat[i]) * pxPerLat
-        if (x < -4 || y < -4 || x > size.x + 4 || y > size.y + 4) continue
-        const mass = frame.mass[i]
-        const alpha = Math.max(0.12, Math.min(0.85, mass * 4000))
-        ctx.fillStyle = `rgba(90, 90, 90, ${alpha})`
+        const p = map.latLngToContainerPoint([frame.lat[i], frame.lon[i]])
+        if (p.x < -6 || p.y < -6 || p.x > size.x + 6 || p.y > size.y + 6) continue
+        const norm = frame.mass[i] / maxMass
+        const alpha = 0.35 + 0.5 * norm
+        // soft halo, then solid core
+        ctx.fillStyle = `rgba(70, 60, 85, ${alpha * 0.25})`
         ctx.beginPath()
-        ctx.arc(x, y, 2.2, 0, Math.PI * 2)
+        ctx.arc(p.x, p.y, 7, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = `rgba(55, 45, 70, ${alpha})`
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2)
         ctx.fill()
       }
     }
