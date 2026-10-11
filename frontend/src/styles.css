@@ -133,6 +133,108 @@ h2 { margin: 0 0 10px; font-size: 1.05rem; }
 }
 .regen:hover { border-color: var(--accent); }
 
+.agent-panel h2 {
+  margin-bottom: 8px;
+}
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.agent-row label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  min-width: 54px;
+}
+.agent-row select,
+.agent-row textarea {
+  flex: 1 1 0;
+  background: #0b0f14;
+  color: var(--text);
+  border: 1px solid #2c3540;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  min-width: 0;
+}
+.agent-row select:focus,
+.agent-row textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.agent-row textarea {
+  resize: vertical;
+  min-height: 46px;
+  max-height: 92px;
+}
+.agent-question {
+  width: 100%;
+  margin-bottom: 10px;
+}
+.agent-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.agent-btn {
+  background: var(--accent);
+  color: #06232f;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.agent-btn:hover:not(:disabled) { filter: brightness(1.05); }
+.agent-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.agent-status {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.agent-thinking {
+  color: var(--accent);
+  font-weight: 600;
+}
+.agent-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.agent-meta .chip {
+  background: #212a33;
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.agent-source {
+  align-items: center;
+  gap: 5px;
+}
+.agent-answer {
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.agent-error {
+  color: #ffb4ab;
+  font-size: 0.82rem;
+  margin-top: 6px;
+}
+.agent-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
 .error-card { max-width: 520px; margin: 0 auto; }
 .error-card button {
   background: var(--accent);

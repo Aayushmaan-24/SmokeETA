@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet'
 import ParticleLayer, { SEVERITY_COLORS } from './ParticleLayer.jsx'
 import { useDashboardData, formatHour } from './useDashboardData.js'
+import { askAgent } from './api.js'
 import L from 'leaflet'
 
 const DEFAULT_ZOOM = 9
@@ -85,17 +86,202 @@ export default function App() {
           <button onClick={reload}>Retry</button>
         </div>
       </div>
-    )
+  )
+}
+
+function niceError(e) {
+  if (!e || !e.message) return 'The agent request failed.'
+  const m = e.message || ''
+  if (m.includes('Failed to fetch')) return 'Cannot reach the backend. Is it running on port 8000?'
+  if (m.toLowerCase().includes('abort') || m.toLowerCase().includes('timeout'))
+    return 'The agent took too long. Try again in a moment.'
+  if (m.startsWith('HTTP ')) return `Backend returned ${m}.`
+  return e.message
+}
+
+const PERSONAS = [
+  { value: 'school', label: 'School' },
+  { value: 'asthma', label: 'Asthma' },
+  { value: 'outdoor_worker', label: 'Outdoor Worker' },
+  { value: 'commuter', label: 'Commuter' },
+]
+
+const LANGS = [
+  { value: 'en', label: 'English' },
+  { value: 'hi', label: 'Hindi' },
+]
+
+const MODES = [
+  { value: 'replay', label: 'Replay' },
+  { value: 'live', label: 'Live' },
+]
+
+function AgentPanel({ zones, selectedId, onZoneChange }) {
+  const [question, setQuestion] = useState('')
+  // Sync with map/list selection; null = General question / All zones.
+  const [zoneId, setZoneId] = useState(() => selectedId ?? '')
+  const [persona, setPersona] = useState('school')
+  const [lang, setLang] = useState('en')
+  const [mode, setMode] = useState('replay')
+  const [answer, setAnswer] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const askedRef = useRef(false)
+
+  // Keep zoneId in sync when the map selection changes, but never clear
+  // the user's other agent settings (persona/lang/mode/question).
+  useEffect(() => {
+    if (selectedId != null) {
+      setZoneId(selectedId)
+    }
+  }, [selectedId])
+
+  const zoneOptions = [
+    { value: '', label: 'General question / All zones' },
+    ...zones.map((z) => ({ value: z.id, label: `${z.name} (${z.id})` })),
+  ]
+
+  const selectedZone = zoneId
+    ? zones.find((z) => z.id === zoneId) || null
+    : null
+
+  const handleAsk = async () => {
+    if (loading) return
+    const body = { question, persona, lang, mode }
+    if (zoneId) body.zone = zoneId
+
+    setLoading(true)
+    setError(null)
+    askedRef.current = true
+    try {
+      const res = await askAgent(body)
+      setAnswer(res)
+    } catch (e) {
+      setError(niceError(e))
+      setAnswer(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
+  const canAsk = question.trim().length > 0 && !loading
+
+  return (
+    <div className="card agent-panel">
+      <h2>Ask the smoke assistant</h2>
+      <textarea
+        className="agent-question"
+        rows={2}
+        placeholder="e.g. Which zone will be affected first?"
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+      />
+
+      <div className="agent-row">
+        <label>Zone</label>
+        <select value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
+          {zoneOptions.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="agent-row">
+        <label>Persona</label>
+        <select value={persona} onChange={(e) => setPersona(e.target.value)}>
+          {PERSONAS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="agent-row">
+        <label>Language</label>
+        <select value={lang} onChange={(e) => setLang(e.target.value)}>
+          {LANGS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="agent-row">
+        <label>Mode</label>
+        <select value={mode} onChange={(e) => setMode(e.target.value)}>
+          {MODES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="agent-actions">
+        <button
+          className="agent-btn"
+          disabled={!canAsk}
+          onClick={handleAsk}
+        >
+          Ask
+        </button>
+        <span className="agent-status">
+          {loading ? (
+            <>
+              <span className="agent-thinking">Thinking...</span>
+              <span aria-label="live region" role="status"> </span>
+            </>
+          ) : answer ? (
+            <span className="agent-source">
+              <span className="dot" style={{ background: resSourceColor(answer.source) }} />
+              {answer.source}
+            </span>
+          ) : (
+            ''
+          )}
+        </span>
+      </div>
+
+      {error && <div className="agent-error">{error}</div>}
+
+      {answer && (
+        <div className="agent-meta">
+          {answer.tools_used && answer.tools_used.length > 0 && (
+            <span className="chip">Tools: {answer.tools_used.join(', ')}</span>
+          )}
+        </div>
+      )}
+
+      {answer && answer.answer != null && (
+        <div className="agent-answer">{answer.answer}</div>
+      )}
+
+      {!answer && askedRef.current && !loading && !error && (
+        <div className="agent-empty">Ask a question to see the answer here.</div>
+      )}
+    </div>
+  )
+}
+
+function resSourceColor(source) {
+  if (source === 'agent') return SEVERITY_COLORS['High']
+  if (source === 'fallback') return SEVERITY_COLORS['Low']
+  return SEVERITY_COLORS.None
+}
   if (loading || !data) {
     return (
       <div className="container center">
         <h1>Smoke ETA</h1>
         <p className="muted">Loading simulation data…</p>
       </div>
-    )
-  }
+  )
+}
+
+
 
   return (
     <div className="container">
@@ -286,6 +472,12 @@ export default function App() {
             between zones — they are not AQI values, and this tool does not predict
             future air quality.
           </div>
+
+          <AgentPanel
+            zones={zones}
+            selectedId={selectedId}
+            onZoneChange={setSelectedId}
+          />
 
           <button
             className="regen"
