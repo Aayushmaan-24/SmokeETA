@@ -6,6 +6,7 @@ import { askAgent, regenerate } from './api.js'
 import L from 'leaflet'
 
 const DEFAULT_ZOOM = 9
+const REPLAY_WINDOW = 'Oct 30 to Nov 1, 2024'
 const SEVERITY_ORDER = ['Very High', 'High', 'Moderate', 'Low', 'None']
 
 /** Respect the user's reduced-motion preference for scroll behavior. */
@@ -622,18 +623,24 @@ export default function App() {
   const rafRef = useRef(null)
   const lastTsRef = useRef(null)
 
-  const sim = data?.sim ?? null
-  const frames = sim?.frames || []
-  // Scored zone results come from the active simulation response (sim.zones).
-  // Fall back to raw zones.json only for coordinates/metadata when no sim is
-  // available, so the list/map keys keep working during loading/errors.
-  const zones = (sim?.zones && sim.zones.length) ? sim.zones : data?.zones || []
-  const fires = data?.fires || []
-  const aqi = data?.aqi || {}
-  const meta = sim?.meta ?? {}
-  const durationH = meta.duration_hours ?? 48
-  const isReplay = mode === 'replay' || meta.mode === 'replay' || (sim && sim._replay) || false
-  const replayDate = replayDateLabel(sim)
+const sim = data?.sim ?? null
+const frames = sim?.frames || []
+const zones = (sim?.zones && sim.zones.length) ? sim.zones : data?.zones || []
+const meta = sim?.meta ?? {}
+const durationH = meta.duration_hours ?? 48
+const isReplay = mode === 'replay'
+const replayDate = REPLAY_WINDOW
+
+// Replay must never show live fires or live AQI. Use the replay's own sources.
+const replayFires = useMemo(
+  () =>
+    (meta.sources || [])
+      .filter((s) => s.lat != null && s.lon != null)
+      .map((s) => ({ lat: s.lat, lon: s.lon, frp: s.frp_sum })),
+  [sim]
+)
+const fires = isReplay ? replayFires : data?.fires || []
+const aqi = isReplay ? {} : data?.aqi || {}
 
   // Playback loop.
   // On the very first Play press starting from hour 0, skip ahead to the
@@ -898,6 +905,7 @@ export default function App() {
             </div>
 
             <div className="masthead-meta">
+            {!isReplay && (
               <span>
                 Run based on{' '}
                 <strong className="tabular">
@@ -906,6 +914,7 @@ export default function App() {
                     : 'pending generation'}
                 </strong>
               </span>
+            )}
               {isReplay && replayDate && (
                 <span>
                   Replay date ·{' '}
