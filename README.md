@@ -15,6 +15,35 @@ Every October and November, crop-residue fires in Punjab and Haryana send smoke 
 - A **Smoke Assistant** (Strands agent + local Ollama model) answers questions such as "Should tomorrow's outdoor sports go ahead?" for different personas (school, asthma, outdoor worker, commuter), in English or Hindi.
 - **Live mode** uses current fires and the wind forecast. **Replay mode** uses real data from a past stubble-burning event (2024-10-30 to 2024-11-01), so the demo works even when today's fire count is low.
 
+## Screenshots
+
+### Live Dashboard
+The live dashboard displays fire hotspots, smoke dispersion, and predicted impact across Delhi-NCR.
+![Live Dashboard](screenshots/live-mode.png)
+
+### Dashboard Overview
+An overview of the Smoke ETA dashboard and its key features.
+![Dashboard Overview](screenshots/smoke-eta-dash.png)
+
+### Historical Replay: Smoke Movement
+Replay mode uses historical data to demonstrate how smoke may travel toward Delhi-NCR.
+![Historical Replay 1](screenshots/replay-smoke-move.png)
+![Historical Replay 2](screenshots/smoke-replay-move1.png)
+
+### Zone-wise Predictions
+View estimated smoke arrival times, peak hours, and relative severity for monitored zones.
+![Zone-wise Predictions 1](screenshots/zonewisepredict1.png)
+![Zone-wise Predictions 2](screenshots/zonewisepredict2.png)
+
+### Smoke Assistant
+**English**:
+Ask about smoke conditions, zone predictions, and practical precautions in English.
+![Smoke Assistant English](screenshots/assist-eng.png)
+
+**Hindi**:
+Get smoke-related information and precautions in Hindi.
+![Smoke Assistant Hindi](screenshots/assist-hindi.png)
+
 ## Architecture
 
 ```
