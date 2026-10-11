@@ -8,6 +8,16 @@ import L from 'leaflet'
 const DEFAULT_ZOOM = 9
 const SEVERITY_ORDER = ['Very High', 'High', 'Moderate', 'Low', 'None']
 
+/** Respect the user's reduced-motion preference for scroll behavior. */
+function prefersReducedMotion() {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch {
+    return false
+  }
+}
+
 function severityColor(z) {
   return SEVERITY_COLORS[z.severity] || SEVERITY_COLORS.None
 }
@@ -75,12 +85,11 @@ function resSourceDot(source) {
 
 // ---------- Agent panel (desktop-first, keyboard accessible) ----------
 
-function AgentPanel({ zones, selectedId, onZoneChange }) {
+function AgentPanel({ zones, selectedId, onZoneChange, mode }) {
   const [question, setQuestion] = useState('')
   const [zoneId, setZoneId] = useState(() => (selectedId != null ? String(selectedId) : ''))
   const [persona, setPersona] = useState('school')
   const [lang, setLang] = useState('en')
-  const [mode, setMode] = useState('replay')
   const [answer, setAnswer] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -190,19 +199,11 @@ function AgentPanel({ zones, selectedId, onZoneChange }) {
           </select>
         </div>
 
-        <div className="agent-field">
-          <label htmlFor="ag-mode">Mode</label>
-          <select
-            id="ag-mode"
-            value={mode}
-            onChange={(e) => setMode(e.target.value)}
-          >
-            {MODES.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
+        <div className="agent-field agent-field-muted">
+          <span className="agent-field-label">Mode</span>
+          <span className="agent-field-value" aria-live="polite">
+            {mode === 'replay' ? 'Replay · uses global mode=replay on /api/sim?mode=replay and /api/ask' : 'Live · uses global mode=live on /api/sim?mode=live and /api/ask'}
+          </span>
         </div>
       </div>
 
@@ -555,6 +556,16 @@ const SEVERITY_LEGEND = SEVERITY_ORDER.map((s) => ({
   color: SEVERITY_COLORS[s],
 }))
 
+function severityAbbrev(sev) {
+  return {
+    'Very High': 'VH',
+    High: 'H',
+    Moderate: 'M',
+    Low: 'L',
+    None: 'None',
+  }[sev] ?? sev
+}
+
 function MapLegend({ isReplay }) {
   return (
     <div className="legend" role="region" aria-label="Map legend">
@@ -573,13 +584,12 @@ function MapLegend({ isReplay }) {
         <b>Zone marker</b>
       </div>
       <div className="legend-sev" style={{ marginLeft: 'auto' }}>
-        <span className="scale">Severity</span>
-        {SEVERITY_LEGEND.map(({ label, color }) => (
-          <span key={label} className="legend-item">
-            <span className="dot" style={{ background: color }} />
-            {label}
-          </span>
-        ))}
+        <span className="scale">Severity</span>      {SEVERITY_LEGEND.map(({ label, color }) => (
+            <span key={label} className="legend-item legend-sev-item" title={label}>
+              <span className="dot" style={{ background: color }} />
+              <span className="legend-sev-label">{severityAbbrev(label)}</span>
+            </span>
+          ))}
       </div>
       {isReplay && (
         <div className="legend-item">
@@ -603,10 +613,12 @@ function MapLegend({ isReplay }) {
 // ---------- Main app ----------
 
 export default function App() {
-  const { data, error, loading, reload } = useDashboardData()
-  const [hour, setHour] = useState(0)
+  const [mode, setMode] = useState('replay')
+  const { data, error, loading, reload } = useDashboardData(mode)
+  const [hour, setHour] = useState(20)
   const [playing, setPlaying] = useState(false)
   const [selectedId, setSelectedId] = useState(null)
+  const [playBackedFromZero, setPlayBackedFromZero] = useState(true)
   const rafRef = useRef(null)
   const lastTsRef = useRef(null)
 
@@ -620,18 +632,36 @@ export default function App() {
   const aqi = data?.aqi || {}
   const meta = sim?.meta ?? {}
   const durationH = meta.duration_hours ?? 48
-  const isReplay = meta.mode === 'replay' || (sim && sim._replay) || false
+  const isReplay = mode === 'replay' || meta.mode === 'replay' || (sim && sim._replay) || false
   const replayDate = replayDateLabel(sim)
 
-  // Playback loop
+  // Playback loop.
+  // On the very first Play press starting from hour 0, skip ahead to the
+  // first non-zero frame so the user sees movement immediately. With hourly
+  // output frames and a 2.5 sim-h/real-s playback rate, ramping from 0 would
+  // show the t=0 frame for the first ~0.4s and then only change every ~0.4s —
+  // which reads as "no movement" on first interaction.
   useEffect(() => {
     if (!playing) return
+
+    // First-frame skip: if we are literally at hour 0 (start of sim) and have
+    // frames, jump to the first frame whose hour is > 0 so the displayed
+    // particles are not the t=0 snapshot.
+    if (hour === 0 && frames.length > 1) {
+      const firstNonZero = frames.find((f) => f.hour > 0)
+      if (firstNonZero) {
+        setHour(firstNonZero.hour)
+        setPlayBackedFromZero(false)
+      }
+    }
+
     const tick = (ts) => {
       if (lastTsRef.current == null) lastTsRef.current = ts
       const dt = (ts - lastTsRef.current) / 1000
       lastTsRef.current = ts
       setHour((h) => {
         const next = h + dt * 2.5
+        // Loop back to start at the end of the window.
         return next >= durationH ? 0 : next
       })
       rafRef.current = requestAnimationFrame(tick)
@@ -641,7 +671,7 @@ export default function App() {
       cancelAnimationFrame(rafRef.current)
       lastTsRef.current = null
     }
-  }, [playing, durationH])
+  }, [playing, frames, hour, durationH])
 
   const frameForHour = useMemo(() => {
     if (!frames.length) return null
@@ -667,14 +697,7 @@ export default function App() {
   if (error) {
     return (
       <div className="app">
-        <div className="topbar">
-          <div className="brand">
-            <span className="brand-mark" />
-            <span className="brand-name">
-              Smoke<span>ETA</span>
-            </span>
-          </div>
-        </div>
+        <TopBarGlobal mode={mode} onModeChange={setMode} />
         <div className="main">
           <div className="card" style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center' }}>
             <div className="uppercase" style={{ color: 'var(--orange)', letterSpacing: '0.12em', marginBottom: 8 }}>
@@ -698,21 +721,15 @@ export default function App() {
   if (loading || !data) {
     return (
       <div className="app">
-        <div className="topbar">
-          <div className="brand">
-            <span className="brand-mark" />
-            <span className="brand-name">
-              Smoke<span>ETA</span>
-            </span>
-          </div>
-        </div>
+        <TopBarGlobal mode={mode} onModeChange={setMode} />
         <LoadingState />
       </div>
     )
   }
 
-  const topbarMode = isReplay ? 'replay' : 'live'
-  const topbarLabel = isReplay ? 'Replay' : 'Live'
+  const topbarMode = mode
+  const topbarLabel = mode === 'replay' ? 'Replay' : 'Live'
+  const replayBadgeLabel = 'Replay: past event, 2024-11-01 window'
 
   return (
     <div className="app">
@@ -740,6 +757,8 @@ export default function App() {
           <span className="pulse" aria-hidden="true" />
           {topbarLabel}
         </div>
+
+        <ModeToggle current={mode} onChange={setMode} />
       </header>
 
       {/* ---------- Layout ---------- */}
@@ -747,8 +766,13 @@ export default function App() {
         {/* Sidebar */}
         <nav className="side" aria-label="Main navigation">
           <div className="side-section">
-            <div className="nav">
-              <button className="nav-item active" tabIndex={0}>
+            <div className="nav">              <button
+                className={`nav-item ${topbarMode === 'live' ? '' : ''}`}
+                tabIndex={-1}
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+                }}
+              >
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -762,7 +786,14 @@ export default function App() {
                 </svg>
                 Dashboard
               </button>
-              <button className="nav-item" tabIndex={-1}>
+              <button
+                className="nav-item"
+                tabIndex={-1}
+                onClick={() => {
+                  const el = document.getElementById('zones')
+                  if (el) el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' })
+                }}
+              >
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -775,7 +806,14 @@ export default function App() {
                 </svg>
                 Zones
               </button>
-              <button className="nav-item" tabIndex={-1}>
+              <button
+                className="nav-item"
+                tabIndex={-1}
+                onClick={() => {
+                  const el = document.getElementById('timeline')
+                  if (el) el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' })
+                }}
+              >
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -787,7 +825,14 @@ export default function App() {
                 </svg>
                 Timeline
               </button>
-              <button className="nav-item" tabIndex={-1}>
+              <button
+                className="nav-item"
+                tabIndex={-1}
+                onClick={() => {
+                  const el = document.getElementById('assistant')
+                  if (el) el.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' })
+                }}
+              >
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -962,7 +1007,13 @@ export default function App() {
           </section>
 
           {/* Timeline */}
-          <section className="timeline" aria-label="Smoke timeline">
+          <section id="timeline" className="timeline" aria-label="Smoke timeline">
+            {isReplay && (
+              <div className="replay-badge" aria-label="Replay mode">
+                <span className="pulse" aria-hidden="true" />
+                Replay: past event, 2024-11-01 window
+              </div>
+            )}
             <div className="timeline-controls">
               <button
                 onClick={() => {
@@ -1031,9 +1082,9 @@ export default function App() {
               aria-label="Timeline hour"
             />
 
-            <div className="timeline-ticks">
+            <div className="timeline-ticks" aria-label="Timeline hours">
               {[0, 12, 24, 36, 48].map((h) => (
-                <span key={h}>{formatHour(h)}</span>
+                <span key={h}>{h}h</span>
               ))}
             </div>
           </section>
@@ -1041,7 +1092,7 @@ export default function App() {
           {/* Lower grid: zones + details */}
           <div className="lower">
             {/* Zones list */}
-            <div className="card">
+            <div id="zones" className="card">
               <div className="card-head">
                 <span className="card-title">Monitored zones</span>
                 <span className="small muted">
@@ -1076,11 +1127,12 @@ export default function App() {
           </div>
 
           {/* AI assistant */}
-          <section className="card agent-panel" style={{ marginTop: 14 }} aria-label="Smoke assistant">
+          <section id="assistant" className="card agent-panel" style={{ marginTop: 14 }} aria-label="Smoke assistant">
             <AgentPanel
               zones={zones}
               selectedId={selectedId}
               onZoneChange={setSelectedId}
+              mode={mode}
             />
           </section>
 
@@ -1103,5 +1155,57 @@ export default function App() {
         </main>
       </div>
     </div>
+  )
+}
+
+function ModeToggle({ current, onChange }) {
+  return (
+    <div className="mode-toggle" role="group" aria-label="Live / Replay mode">
+      <button
+        className={`mode-btn ${current === 'live' ? 'active' : ''}`}
+        onClick={() => onChange('live')}
+        aria-pressed={current === 'live'}
+      >
+        Live
+      </button>
+      <button
+        className={`mode-btn ${current === 'replay' ? 'active' : ''}`}
+        onClick={() => onChange('replay')}
+        aria-pressed={current === 'replay'}
+      >
+        Replay
+      </button>
+    </div>
+  )
+}
+
+function TopBarGlobal({ mode, onModeChange }) {
+  return (
+    <header className="topbar" role="banner">
+      <div className="brand">
+        <span className="brand-mark" aria-hidden="true" />
+        <span className="brand-name">
+          Smoke<span>ETA</span>
+        </span>
+      </div>
+
+      <div className="topbar-context">
+        <span>Delhi-NCR</span>
+        <span className="sep" aria-hidden="true" />
+        <span className="dim">Smoke dispersion intelligence</span>
+      </div>
+
+      <div
+        className={`topbar-mode ${mode}`}
+        role="status"
+        aria-live="polite"
+        aria-label={`Dashboard mode: ${mode === 'replay' ? 'Replay' : 'Live'}${mode === 'replay' ? ', historical replay data' : ', live simulation mode'}`}
+      >
+        <span className="pulse" aria-hidden="true" />
+        {mode === 'replay' ? 'Replay' : 'Live'}
+      </div>
+
+      <ModeToggle current={mode} onChange={onModeChange} />
+    </header>
   )
 }

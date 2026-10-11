@@ -5,7 +5,7 @@ import { getSim, getFires, getAqi, getZones } from './api.js'
  * Loads all dashboard data in parallel; returns {data, error, loading, reload}.
  * data = null until everything required (sim + zones) is available.
  */
-export function useDashboardData() {
+export function useDashboardData(mode = 'live') {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -16,7 +16,7 @@ export function useDashboardData() {
     setLoading(true)
     setError(null)
 
-    Promise.all([getSim(), getFires(), getAqi(), getZones()])
+    Promise.all([getSim(mode), getFires(), getAqi(), getZones()])
       .then(([sim, fires, aqi, zones]) => {
         if (cancelled) return
         setData({ sim, fires, aqi, zones })
@@ -32,7 +32,7 @@ export function useDashboardData() {
     return () => {
       cancelled = true
     }
-  }, [reloadKey])
+  }, [reloadKey, mode])
 
   return { data, error, loading, reload: () => setReloadKey((k) => k + 1) }
 }

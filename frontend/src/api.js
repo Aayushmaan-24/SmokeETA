@@ -18,8 +18,9 @@ async function fetchJsonImpl(path, options = {}) {
   return res.json()
 }
 
-export async function fetchJson(path) {
-  return fetchJsonImpl(path)
+
+export async function fetchJson(path, options = {}) {
+  return fetchJsonImpl(path, options)
 }
 
 export async function fetchJsonWithTimeout(path, options = {}, timeoutMs = API_TIMEOUT_MS) {
@@ -32,7 +33,7 @@ export async function fetchJsonWithTimeout(path, options = {}, timeoutMs = API_T
   }
 }
 
-export const getSim = () => fetchJson('/api/sim')
+export const getSim = (mode = 'live') => fetchJson('/api/sim?mode=' + encodeURIComponent(mode))
 export const getFires = () => fetchJson('/api/fires')
 export const getAqi = () => fetchJson('/api/aqi')
 export const getZones = () => fetchJson('/api/zones')

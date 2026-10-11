@@ -580,8 +580,8 @@ tabular { font-variant-numeric: tabular-nums; }
 .agent-source .dot { width: 7px; height: 7px; }
 .agent-source.agent { color: var(--lime); }
 .agent-source.fallback { color: var(--text-dim); }
-.agent-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
-.agent-meta .chip { background: rgba(255,255,255,0.04); border: 1px solid var(--border-soft); padding: 2px 7px; border-radius: 5px; }
+.agent-meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; align-items: center; }
+.agent-meta .chip { background: rgba(255,255,255,0.04); border: 1px solid var(--border-soft); padding: 2px 7px; border-radius: 5px; flex: 0 0 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-answer { font-size: 0.9rem; line-height: 1.5; color: var(--text); }
 .agent-error { color: var(--orange); font-size: 0.82rem; margin-top: 2px; font-weight: 500; }
 .agent-empty { color: var(--muted); font-size: 0.8rem; font-style: italic; }
@@ -613,6 +613,89 @@ timeline button:disabled { opacity: 0.4; cursor: not-allowed; }
 .slider { width: 100%; accent-color: var(--lime); height: 4px; }
 .slider::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--lime); cursor: pointer; box-shadow: 0 0 0 3px rgba(199,245,66,0.2); }
 .timeline-ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 3px; }
+
+/* Global Live/Replay toggle */
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  padding: 3px;
+  gap: 2px;
+}
+.mode-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active {
+  background: var(--text);
+  color: var(--bg);
+}
+.mode-btn.active[aria-pressed="true"] { }
+
+/* Replay badge in timeline */
+.replay-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255,120,63,0.08);
+  border: 1px solid rgba(255,120,63,0.4);
+  color: var(--orange);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+.replay-badge .pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--orange);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+
+/* Fix for overlapping None chip: keep chip inline and contained */
+.agent-meta .chip {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Make the last agent-field show mode as read-only text */
+.agent-field-muted {
+  opacity: 0.7;
+}
+.agent-field-muted .agent-field-label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+.agent-field-value {
+  display: block;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
 
 /* ---------------- Utilities ---------------- */
 .empty-state { color: var(--muted); padding: 22px 4px; text-align: center; font-size: 0.85rem; }
