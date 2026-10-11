@@ -383,16 +383,190 @@ def _build_fallback(zone_id: str, eta: dict, mode: str, persona: str, lang: str)
 
 
 def _pick_first_zone_without_explicit_zone(mode: str) -> dict:
-    """Return smoke_eta for the first zone that has an arrival, for 'which zone first' queries."""
+    """Return smoke_eta for the first zone that has an arrival, for 'which zone first' queries.
+
+    Deprecated for general questions: prefer get_zone_ranking() for multi-zone answers.
+    Kept because existing single-zone fallback paths still use it.
+    """
     sim = _load_sim(mode)
     zones = sim.get("zones", [])
-    # Prefer zones that arrived, sorted by arrival hour.
     arrived = [z for z in zones if z.get("arrived")]
     arrived.sort(key=lambda z: (z.get("arrival_hour") or 999))
     chosen = arrived[0] if arrived else (zones[0] if zones else None)
     if chosen is None:
         return {"zone": "unknown", "error": "No zones available."}
     return get_smoke_eta(chosen["id"], mode=mode)
+
+
+# ---------------------------------------------------------------------------
+# Ranking-based fallback answers (general / all-zone questions)
+# ---------------------------------------------------------------------------
+
+def _first_n_with_arrivals(rank, n=3):
+    """Return up to n ranking entries that have an estimated arrival, in order."""
+    out = []
+    for item in rank:
+        a = item.get("arrival_hour")
+        if isinstance(a, (int, float)):
+            out.append(item)
+            if len(out) >= n:
+                break
+    return out
+
+
+def _rank_summary(rank: list[dict], persona: str, lang: str, mode: str) -> str:
+    """Build a concise, honest multi-zone comparison from a ranking list.
+
+    Never invents arrival times. When no zone has an arrival, says so plainly
+    and still names the first zone by the simulation's ordering.
+    """
+    if not rank:
+        return _no_zones_message(mode, lang, persona)
+
+    arrived = _first_n_with_arrivals(rank, 3)
+    if arrived:
+        parts = []
+        for item in arrived:
+            a = item.get("arrival_hour")
+            p = item.get("peak_hour")
+            a_txt = _fmt_hour(a, lang)
+            p_txt = _fmt_hour(p, lang)
+            sev = _sev_label(item.get("severity"), lang)
+            local = "local fires nearby" if item.get("local_fires_nearby") else "no local fires nearby"
+            line = _ranking_line(item["zone_name"], a_txt, p_txt, sev, local, lang)
+            parts.append(line)
+        return _ranking_template(parts, mode, persona, lang)
+
+    # No zone has an arrival.
+    first = rank[0]
+    return _no_arrival_summary(first, rank, mode, persona, lang)
+
+
+def _no_zones_message(mode: str, lang: str, persona: str) -> str:
+    if lang == "hi":
+        return (
+            "धुएँ के Skipping zones. Smoke ETA data has no zones right now, so I can't compare them. "
+            "Check back after data is loaded."
+        )
+    return (
+        "Smoke ETA currently has no zone data, so I can't compare zones. "
+        "Try again after the data is loaded."
+    )
+
+
+def _fmt_hour(v, lang: str) -> str:
+    if not isinstance(v, (int, float)):
+        return _word(v, lang)
+    if lang == "hi":
+        return f"{v:.0f} घंटे"
+    return f"hour {v:.1f}"
+
+
+def _word(v, lang: str) -> str:
+    if lang == "hi":
+        return "अनुमानित नहीं"
+    return "not estimated"
+
+
+def _sev_label(sev, lang: str) -> str:
+    if lang == "hi":
+        return {"Low": "कम", "Moderate": "मध्यम", "High": "उच्च",
+                "Very High": "बहुत उच्च", "None": "कोई नहीं"}.get(sev, "अज्ञात")
+    return sev or "Unknown"
+
+
+def _ranking_line(name, arrival_txt, peak_txt, sev, local, lang: str) -> str:
+    if lang == "hi":
+        return f"- {name}: {sev}, लगभग {arrival_txt} पहुँच, चरम {peak_txt}; {local}."
+    return f"- {name}: {sev}, arriving ~{arrival_txt}, peak ~{peak_txt}; {local}."
+
+
+def _ranking_template(parts: list[str], mode: str, persona: str, lang: str) -> str:
+    body = "\n".join(parts)
+    advice = _persona_advice(persona, lang, mode)
+    note = _note(mode, lang)
+    if lang == "hi":
+        return (
+            "धुएँ अनुमान के अनुसार, सबसे पहले प्रभावित जोन:\n"
+            + body
+            + "\n\n"
+            + advice
+            + "\n"
+            + note
+        )
+    return (
+        "Based on the smoke estimate, the first affected zones are:\n"
+        + body
+        + "\n\n"
+        + advice
+        + "\n"
+        + note
+    )
+
+
+def _no_arrival_summary(first: dict, rank: list[dict], mode: str, persona: str, lang: str) -> str:
+    name = first.get("zone_name") or first.get("zone_id")
+    sev = _sev_label(first.get("severity"), lang)
+    local = "local fires nearby" if first.get("local_fires_nearby") else "no local fires nearby"
+    if lang == "hi":
+        intro = (
+            "इस समय किसी भी जोन में धुएँ के पहुँचने का अनुमान नहीं है। "
+            + f"{name} ({sev})। {local}."
+        )
+    else:
+        intro = (
+            f"No zone currently has a smoke arrival estimate. Leading zone: {name} ({sev}). {local}."
+        )
+    advice = _persona_advice(persona, lang, mode)
+    note = _note(mode, lang)
+    return intro + "\n\n" + advice + "\n" + note
+
+
+def _persona_advice(persona: str, lang: str, mode: str) -> str:
+    if lang == "hi":
+        return {
+            "school": "अगर गंभीरता उच्च या बहुत उच्च है, तो बाहरी गतिविधियाँ टालें; वरना बाहर का समय आरंभ में योजना करें।",
+            "asthma": "अस्थमा हो तो खिड़कियाँ बंद रखें और बाहर कम निकलें; निजी सलाह के लिए डॉक्टर से मिलें।",
+            "outdoor_worker": "बाहर का भारी काम पहले निपटाएँ और चरम समय में अंदर आराम करें।",
+            "commuter": "चरम समय से बाहर यात्रा करें और वाहन की खिड़कियाँ बंद रखें।",
+        }.get(persona, _PERSONA_ADVICE_HI["commuter"])
+    return _PERSONA_ADVICE_EN.get(persona, _PERSONA_ADVICE_EN["commuter"])
+
+
+_PERSONA_ADVICE_HI = {
+    "school": "अगर गंभीरता उच्च या बहुत उच्च है, तो बाहरी गतिविधियाँ टालें; वरना बाहर का समय आरंभ में योजना करें।",
+    "asthma": "अस्थमा हो तो खिड़कियाँ बंद रखें और बाहर कम निकलें; निजी सलाह के लिए डॉक्टर से मिलें।",
+    "outdoor_worker": "बाहर का भारी काम पहले निपटाएँ और चरम समय में अंदर आराम करें।",
+    "commuter": "चरम समय से बाहर यात्रा करें और वाहन की खिड़कियाँ बंद रखें।",
+}
+
+_PERSONA_ADVICE_EN = {
+    "school": "If severity is High or Very High, postpone outdoor activities; otherwise plan outdoor time earlier.",
+    "asthma": "If you have asthma, keep windows shut and limit outdoor time; consult a doctor for personal advice.",
+    "outdoor_worker": "Do heavy outdoor work earlier and rest indoors during the peak.",
+    "commuter": "Travel outside the peak window and keep vehicle windows up.",
+}
+
+
+def _note(mode: str, lang: str) -> str:
+    if lang == "hi":
+        if mode == "replay":
+            return "यह 2024-11-01 की पिछली घटना पर आधारित अनुमान है, लाइव पूर्वानुमान नहीं।"
+        return "यह सापेक्ष अनुमान है, स्वास्थ्य पूर्वानुमान नहीं।"
+    if mode == "replay":
+        return "This is based on a past event (2024-11-01 window) in replay mode."
+    return "This is a relative smoke estimate, not a health forecast."
+
+
+def _build_fallback_ranking(rank: list[dict], persona: str, lang: str, mode: str) -> str:
+    """Build a concise, honest multi-zone comparison from the ranking list.
+
+    This is used for general (no-zone) questions when the agent path is
+    unavailable. It never invents arrival times or orderings.
+    """
+    if not rank:
+        return _no_zones_message(mode, lang, persona)
+    return _rank_summary(rank, persona, lang, mode)
 
 
 # ---------------------------------------------------------------------------
@@ -464,45 +638,105 @@ def ask(question, zone=None, persona="commuter", lang="en",
     if lang not in ("en", "hi"):
         lang = "en"
 
-    # Zone used ONLY for the fallback; the agent gets the user's real zone (or none).
+    # --- General (no zone) path: rank ALL zones -------------------------------
+    if not zone:
+        # Fetch the ordered ranking once; reuse for both agent facts and fallback.
+        try:
+            rank = get_zone_ranking(mode=mode).get("ranking", [])
+        except Exception:
+            rank = []
+        if not rank:
+            return {
+                "answer": "No zone data is available right now.",
+                "tools_used": [],
+                "source": "fallback",
+            }
+        ranking_facts = _ranking_facts(rank)
+
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            agent = _build_agent()
+            prompt = ranking_facts + _build_user_prompt(question, zone, persona, lang, mode)
+            future = executor.submit(_run_agent_turn, agent, prompt)
+            response = future.result(timeout=timeout_s)
+            answer = _extract_answer(response)
+            tools = _tools_from_messages(agent)
+            if answer and tools:
+                return {"answer": answer, "tools_used": tools, "source": "agent"}
+        except Exception:
+            pass   # timeout, Ollama down, model error -> ranking fallback below
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        # Fallback from the ranking, not from a single arbitrary zone.
+        return {
+            "answer": _build_fallback_ranking(rank, persona, lang, mode),
+            "tools_used": ["get_zone_ranking"],
+            "source": "fallback",
+        }
+
+    # --- Single-zone path (unchanged) -----------------------------------------
     fb_zone = zone
-    if not fb_zone:
-        first = _pick_first_zone_without_explicit_zone(mode)
-        if "error" in first:
-            return {"answer": "No zone data is available right now.",
-                    "tools_used": [], "source": "fallback"}
-        fb_zone = first.get("zone")
     try:
         eta = get_smoke_eta(fb_zone, mode=mode)
     except Exception:
         eta = {}
     if not eta or "error" in eta:
-        return {"answer": f"Sorry, I could not load smoke data for '{fb_zone}' in {mode} mode.",
-                "tools_used": ["get_smoke_eta"], "source": "fallback"}
+        return {
+            "answer": f"Sorry, I could not load smoke data for '{fb_zone}' in {mode} mode.",
+            "tools_used": ["get_smoke_eta"],
+            "source": "fallback",
+        }
 
     executor = ThreadPoolExecutor(max_workers=1)
     try:
         agent = _build_agent()
-        facts = ""
-        if zone:
-            facts = (f"FACTS (from the smoke simulation, use these exact numbers): "
-                     f"zone={eta.get('zone_name')}, arrival_hour={eta.get('arrival_hour')}, "
-                     f"peak_hour={eta.get('peak_hour')}, severity={eta.get('severity')}.\n")
+        facts = (f"FACTS (from the smoke simulation, use these exact numbers): "
+                 f"zone={eta.get('zone_name')}, arrival_hour={eta.get('arrival_hour')}, "
+                 f"peak_hour={eta.get('peak_hour')}, severity={eta.get('severity')}.\n")
         prompt = facts + _build_user_prompt(question, zone, persona, lang, mode)
         future = executor.submit(_run_agent_turn, agent, prompt)
-        response = future.result(timeout=timeout_s)   # raises on timeout
+        response = future.result(timeout=timeout_s)
         answer = _extract_answer(response)
         tools = _tools_from_messages(agent)
-        ok = _grounded(answer or "", eta, zone) if zone else bool(tools)
+        ok = _grounded(answer or "", eta, zone)
         if answer and ok:
             return {"answer": answer, "tools_used": tools, "source": "agent"}
     except Exception:
         pass   # timeout, Ollama down, model error -> fallback below
     finally:
-        executor.shutdown(wait=False, cancel_futures=True)  # don't block on a stuck model
+        executor.shutdown(wait=False, cancel_futures=True)
 
-    return {"answer": _build_fallback(fb_zone, eta, mode=mode, persona=persona, lang=lang),
-            "tools_used": ["get_smoke_eta"], "source": "fallback"}
+    return {
+        "answer": _build_fallback(fb_zone, eta, mode=mode, persona=persona, lang=lang),
+        "tools_used": ["get_smoke_eta"],
+        "source": "fallback",
+    }
+
+
+def _ranking_facts(rank: list[dict]) -> str:
+    """Inject the actual ordered ranking as immutable facts for the agent.
+
+    The agent may still call tools, but for comparison questions it already
+    has the real numbers and should not invent ordering or arrival times.
+    """
+    lines = ["FACTS (ordered smoke-zone ranking; use these exact values):"]
+    for item in rank:
+        a = item.get("arrival_hour")
+        p = item.get("peak_hour")
+        sev = item.get("severity", "None")
+        arrived = isinstance(a, (int, float))
+        a_txt = f"{a:.1f}" if arrived else "none"
+        p_txt = f"{p:.1f}" if (arrived and isinstance(p, (int, float))) else "none"
+        local = "local fires nearby" if item.get("local_fires_nearby") else "no local fires nearby"
+        lines.append(
+            f"- {item.get('zone_name')} ({item.get('zone_id')}): "
+            f"arrival={a_txt}, peak={p_txt}, severity={sev}, {local}"
+        )
+    lines.append("\nRules: NEVER invent arrival/peak/severity. If a field is 'none', say 'no estimate'. "
+                 "To say which zone is first/worst, state the FIRST zone in this list that has an arrival. "
+                 "Do not reorder these zones yourself.")
+    return "\n".join(lines) + "\n"
 
 
 def _build_user_prompt(question: str, zone: str, persona: str, lang: str, mode: str) -> str:

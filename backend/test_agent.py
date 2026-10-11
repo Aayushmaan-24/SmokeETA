@@ -171,9 +171,10 @@ class TestFallbackHindi(unittest.TestCase):
         self.assertLess(len(ans.split()), 90)
 
 
-class TestFallbackNoZonePicksFirstArrived(unittest.TestCase):
-    def test_no_zone_uses_first_arrived_zone(self):
-        # When zone is None, ask() picks the first arrived zone and falls back.
+class TestFallbackNoZoneUsesRanking(unittest.TestCase):
+    def test_no_zone_uses_ranking_instead_of_single_zone(self):
+        # When zone is None, ask() now uses the zone ranking for both agent facts
+        # and the fallback, rather than defaulting to a single arbitrary zone.
         with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("fail")):
             result = agent_mod.ask(
                 question="Which zone gets smoke first?",
@@ -184,10 +185,9 @@ class TestFallbackNoZonePicksFirstArrived(unittest.TestCase):
             )
         self.assertEqual(result["source"], "fallback")
         self.assertIn("answer", result)
-        # The first arrived zone in replay is based on arrival_hour ordering.
-        # Just ensure we got a non-empty answer and tools_used includes get_smoke_eta.
         self.assertTrue(result["answer"])
-        self.assertIn("get_smoke_eta", result["tools_used"])
+        # The no-zone path should be grounded in the ranking, not get_smoke_eta.
+        self.assertIn("get_zone_ranking", result["tools_used"])
 
 
 class TestFallbackUnknownZoneReturnsSafeAnswer(unittest.TestCase):
@@ -584,6 +584,137 @@ class TestAskThreadSafety(unittest.TestCase):
             self.assertIsInstance(result["answer"], str)
             self.assertTrue(len(result["answer"].strip()) > 0)
             self.assertEqual(result["source"], "fallback")
+
+
+# ---------------------------------------------------------------------------
+# General-question (no-zone) ranking behavior tests
+# ---------------------------------------------------------------------------
+
+class TestGeneralQuestionRankingFallback(unittest.TestCase):
+    """When no zone is selected, the fallback must be a multi-zone comparison,
+    not a single arbitrary zone."""
+
+    def test_no_zone_fallback_is_ranking_not_single_zone(self):
+        with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("Ollama unreachable")):
+            result = agent_mod.ask(
+                question="Which zone will be affected first?",
+                zone=None,
+                persona="commuter",
+                lang="en",
+                mode="replay",
+            )
+        self.assertEqual(result["source"], "fallback")
+        ans = result["answer"]
+        # The fallback for a general question should mention MORE THAN ONE zone
+        # (the ranking summary), not only a single zone name.
+        self.assertIn("Narela", ans)  # first arrived zone is mentioned
+        # A single-zone answer would only mention Narela; a ranking answer
+        # also mentions another zone (Bawana / DTU and/or Rohini at ~32h).
+        self.assertTrue(
+            ("Bawana" in ans) or ("Rohini" in ans) or ("Mundka" in ans),
+            f"Expected a multi-zone ranking answer, got: {ans!r}",
+        )
+        # Must not read like the old single-zone template.
+        self.assertNotIn("If you commute, try to travel outside the peak window", ans)
+
+    def test_no_zone_fallback_honest_when_no_arrivals(self):
+        # In live mode there are no arrivals; the fallback must say so and not
+        # invent an arrival time or a fake 'first' zone.
+        with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("fail")):
+            result = agent_mod.ask(
+                question="Which zone will be affected first?",
+                zone=None,
+                persona="asthma",
+                lang="en",
+                mode="live",
+            )
+        self.assertEqual(result["source"], "fallback")
+        ans = result["answer"]
+        self.assertTrue(ans.strip())
+        # Honest no-arrival wording.
+        self.assertTrue(
+            ("no zone currently has" in ans.lower())
+            or ("no zone has" in ans.lower())
+            or ("currently has a smoke arrival" in ans.lower()),
+            f"Expected an honest no-arrival answer, got: {ans!r}",
+        )
+        # Must not present a numeric arrival hour as if it were real.
+        self.assertNotIn("hour 26", ans)
+        self.assertNotIn("hour 32", ans)
+
+    def test_no_zone_fallback_includes_replay_disclaimer(self):
+        with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("fail")):
+            result = agent_mod.ask(
+                question="Compare the zones",
+                zone=None,
+                persona="school",
+                lang="en",
+                mode="replay",
+            )
+        self.assertEqual(result["source"], "fallback")
+        self.assertIn("2024-11-01", result["answer"])
+
+class TestGeneralQuestionRankingAgentFacts(unittest.TestCase):
+    """Even when the agent is mocked, verify the no-zone path injects ranking facts."""
+
+    def test_no_zone_uses_get_zone_ranking_not_get_smoke_eta(self):
+        # Patch get_smoke_eta away for the no-zone path and confirm the fallback
+        # still produces a ranking answer using get_zone_ranking.
+        with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("fail")), \
+             patch.object(agent_mod, "get_smoke_eta", side_effect=RuntimeError("should not be used for no-zone path")):
+            result = agent_mod.ask(
+                question="Which zone first?",
+                zone=None,
+                persona="commuter",
+                lang="en",
+                mode="replay",
+            )
+        self.assertEqual(result["source"], "fallback")
+        self.assertIn("get_zone_ranking", result["tools_used"])
+        # Still a real multi-zone answer.
+        self.assertTrue(result["answer"].strip())
+
+
+class TestSelectedZonePathUnchanged(unittest.TestCase):
+    """When a zone IS selected, behavior remains single-zone."""
+
+    def test_selected_zone_fallback_is_single_zone(self):
+        with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("fail")):
+            result = agent_mod.ask(
+                question="When does smoke arrive?",
+                zone="mundka",
+                persona="outdoor_worker",
+                lang="en",
+                mode="replay",
+            )
+        self.assertEqual(result["source"], "fallback")
+        ans = result["answer"]
+        # Single-zone template wording.
+        self.assertIn("If you work outdoors", ans)
+        self.assertIn("Mundka", ans)
+        # Should NOT be a multi-zone list.
+        self.assertNotIn("- Bawana", ans)
+        self.assertIn("get_smoke_eta", result["tools_used"])
+
+
+class TestGeneralQuestionHindiRankingFallback(unittest.TestCase):
+    def test_no_zone_fallback_hindi_is_multi_zone(self):
+        with patch.object(agent_mod, "_build_agent", side_effect=RuntimeError("fail")):
+            result = agent_mod.ask(
+                question="कौन सा ज़ोन सबसे पहले प्रभावित होगा?",
+                zone=None,
+                persona="school",
+                lang="hi",
+                mode="replay",
+            )
+        self.assertEqual(result["source"], "fallback")
+        ans = result["answer"]
+        # Hindi ranking summary should mention at least two zones.
+        zones_mentioned = sum(1 for name in ("नरेला", "Narela", "बायाना", "Bawana", "रोहिनी", "Rohini", "मुंडका", "Mundka")
+                             if name in ans)
+        self.assertGreaterEqual(zones_mentioned, 2,
+                                f"Expected Hindi multi-zone answer, got: {ans!r}")
+        self.assertIn("2024-11-01", ans)
 
 
 # ---------------------------------------------------------------------------
