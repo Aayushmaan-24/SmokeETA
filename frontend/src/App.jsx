@@ -612,7 +612,10 @@ export default function App() {
 
   const sim = data?.sim ?? null
   const frames = sim?.frames || []
-  const zones = data?.zones || []
+  // Scored zone results come from the active simulation response (sim.zones).
+  // Fall back to raw zones.json only for coordinates/metadata when no sim is
+  // available, so the list/map keys keep working during loading/errors.
+  const zones = (sim?.zones && sim.zones.length) ? sim.zones : data?.zones || []
   const fires = data?.fires || []
   const aqi = data?.aqi || {}
   const meta = sim?.meta ?? {}

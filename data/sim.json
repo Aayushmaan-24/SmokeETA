@@ -1,6 +1,6 @@
 {
  "meta": {
-  "generated_at": "2026-10-09T08:49:46Z",
+  "generated_at": "2026-10-11T11:15:30Z",
   "duration_hours": 48.0,
   "timestep_minutes": 10,
   "total_particles": 20592,
@@ -126983,13 +126983,13 @@
    "lon": 77.12,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 0.0,
+   "peak_influence": 0.6018,
+   "influence_score": 0.0354,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 0. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "narela",
@@ -126998,13 +126998,13 @@
    "lon": 77.09,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 6.0,
+   "peak_influence": 0.8191,
+   "influence_score": 0.0756,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 6. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "rohini",
@@ -127013,13 +127013,13 @@
    "lon": 77.06,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 0.0,
+   "peak_influence": 0.2,
+   "influence_score": 0.0275,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 0. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "mundka",
@@ -127028,13 +127028,13 @@
    "lon": 77.03,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 2.0,
+   "peak_influence": 0.3742,
+   "influence_score": 0.0452,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 2. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "wazirpur",
@@ -127043,13 +127043,13 @@
    "lon": 77.17,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 0.0,
+   "peak_influence": 0.2,
+   "influence_score": 0.0194,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 0. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "connaught_place",
@@ -127058,13 +127058,13 @@
    "lon": 77.22,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 3.0,
+   "peak_hour": 14.0,
+   "peak_influence": 0.6282,
+   "influence_score": 0.0279,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 3 of the 48h window and peak around hour 14. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "anand_vihar",
@@ -127073,13 +127073,13 @@
    "lon": 77.32,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 1.0,
+   "peak_hour": 13.0,
+   "peak_influence": 0.5196,
+   "influence_score": 0.0314,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 1 of the 48h window and peak around hour 13. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "dwarka",
@@ -127088,13 +127088,13 @@
    "lon": 77.05,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 1.0,
+   "peak_hour": 2.0,
+   "peak_influence": 0.9354,
+   "influence_score": 0.1061,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 1 of the 48h window and peak around hour 2. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "rk_puram",
@@ -127103,13 +127103,13 @@
    "lon": 77.17,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 14.0,
+   "peak_influence": 0.6282,
+   "influence_score": 0.0584,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 14. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "okhla",
@@ -127118,13 +127118,13 @@
    "lon": 77.28,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 13.0,
+   "peak_influence": 0.5196,
+   "influence_score": 0.033,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 13. Relative estimate only, not an AQI forecast."
   },
   {
    "id": "vasant_kunj",
@@ -127133,13 +127133,13 @@
    "lon": 77.16,
    "radius_km": 12.0,
    "local_fires_nearby": true,
-   "arrival_hour": null,
-   "peak_hour": null,
-   "peak_influence": 0.0,
-   "influence_score": 0.0,
-   "severity": "None",
-   "arrived": false,
-   "status": "No arrival detected within 48 hours"
+   "arrival_hour": 0.0,
+   "peak_hour": 0.0,
+   "peak_influence": 1.0,
+   "influence_score": 0.0756,
+   "severity": "Low",
+   "arrived": true,
+   "status": "Smoke may arrive around hour 0 of the 48h window and peak around hour 0. Relative estimate only, not an AQI forecast."
   }
  ]
 }
