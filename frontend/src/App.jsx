@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-le
 import ParticleLayer, { SEVERITY_COLORS } from './ParticleLayer.jsx'
 import { useDashboardData, formatHour } from './useDashboardData.js'
 import { askAgent, regenerate } from './api.js'
+import { REPLAY_EVENT_WINDOW } from './config.js'
 import L from 'leaflet'
 
 const DEFAULT_ZOOM = 9
@@ -25,6 +26,23 @@ function severityColor(z) {
 function severityBrightness(z) {
   // derived for accessible on-color when needed
   return SEVERITY_COLORS[z.severity] || SEVERITY_COLORS.None
+}
+
+/**
+ * True only when an AQI payload actually spans the Replay event window.
+ *
+ * The backend's /api/aqi endpoint ignores the `mode` query param and always
+ * returns the Live payload, so a Replay-mode response must be validated before
+ * it is trusted as historical. This prevents Live AQI leaking into Replay.
+ */
+function isReplayAqiPayload(aqi) {
+  if (!aqi || typeof aqi !== 'object') return false
+  const [start, end] = REPLAY_EVENT_WINDOW.split(' to ')
+  const first = Object.values(aqi)[0]
+  const stamp = first?.hourly?.times?.[0]
+  if (typeof stamp !== 'string') return false
+  const day = stamp.slice(0, 10)
+  return day >= start && day <= end
 }
 
 /** Fits the map view to zones + fire hotspots once, on first data load. */
@@ -200,9 +218,8 @@ function AgentPanel({ zones, selectedId, onZoneChange, mode }) {
         </div>
 
         <div className="agent-field agent-field-muted">
-          <span className="agent-field-label">Mode</span>
           <span className="agent-field-value" aria-live="polite">
-            {mode === 'replay' ? 'Replay · uses global mode=replay on /api/sim?mode=replay and /api/ask' : 'Live · uses global mode=live on /api/sim?mode=live and /api/ask'}
+            {mode === 'replay' ? 'Mode: Replay (2024 event)' : 'Mode: Live'}
           </span>
         </div>
       </div>
@@ -263,7 +280,7 @@ function AgentPanel({ zones, selectedId, onZoneChange, mode }) {
 
 // ---------- Selected zone details ----------
 
-function ZoneDetails({ zone, aqi, isReplay, replayDate }) {
+function ZoneDetails({ zone, aqi, isReplay }) {
   if (!zone) {
     return (
       <div className="empty-state">
@@ -277,10 +294,10 @@ function ZoneDetails({ zone, aqi, isReplay, replayDate }) {
 
   return (
     <div className="zone-details">
-      {isReplay && replayDate && (
+      {isReplay && (
         <div className="replay-tag">
           <span className="pulse" />
-          Historical replay · {replayDate}
+          Historical replay · {REPLAY_EVENT_WINDOW}
         </div>
       )}
 
@@ -362,7 +379,7 @@ function ZoneDetails({ zone, aqi, isReplay, replayDate }) {
         </span>
       </div>
 
-      {aqiNow?.pm2_5 != null && (
+      {isReplay ? (
         <div
           style={{
             display: 'grid',
@@ -375,9 +392,29 @@ function ZoneDetails({ zone, aqi, isReplay, replayDate }) {
             Current PM2.5 / US AQI
           </span>
           <span style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
-            {aqiNow.pm2_5} µg/m³ · {aqiNow.us_aqi}
+            {aqiNow?.pm2_5 != null && aqiNow?.us_aqi != null
+              ? `${aqiNow.pm2_5} µg/m³ · ${aqiNow.us_aqi}`
+              : 'Not available for historical replay'}
           </span>
         </div>
+      ) : (
+        aqiNow?.pm2_5 != null && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              gap: '6px 14px',
+              alignItems: 'baseline',
+            }}
+          >
+            <span className="small muted uppercase" style={{ letterSpacing: '0.06em' }}>
+              Current PM2.5 / US AQI
+            </span>
+            <span style={{ color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
+              {aqiNow.pm2_5} µg/m³ · {aqiNow.us_aqi}
+            </span>
+          </div>
+        )
       )}
 
       {zone.status != null && (
@@ -391,7 +428,7 @@ function ZoneDetails({ zone, aqi, isReplay, replayDate }) {
 
 // ---------- Summary row ----------
 
-function SummaryRow({ sim, fires, zones, isReplay, replayDate }) {
+function SummaryRow({ sim, fires, zones, isReplay }) {
   const meta = sim?.meta ?? {}
   const totalParticles = meta.total_particles
   const nFrames = meta.n_frames
@@ -403,7 +440,7 @@ function SummaryRow({ sim, fires, zones, isReplay, replayDate }) {
       ? fires.filter((f) => f.frp != null && f.frp > 0).length
       : 0
 
-  const mfDate = meta.generated_at ?? meta.replay_date ?? replayDate ?? null
+  const mfDate = meta.generated_at ?? null
 
   return (
     <div className="summaries" aria-label="Dashboard summary">
@@ -465,7 +502,7 @@ function SummaryRow({ sim, fires, zones, isReplay, replayDate }) {
         </div>
         <div className="sub">
           {isReplay
-            ? `Historical data · ${replayDate ?? mfDate ?? 'date unavailable'}`
+            ? `Historical data · ${REPLAY_EVENT_WINDOW}`
             : mfDate ? `Generated · ${mfDate}` : 'Simulation pending'}
         </div>
       </div>
@@ -509,17 +546,6 @@ function ZoneList({ zones, selectedId, onSelect, isReplay }) {
       })}
     </div>
   )
-}
-
-// ---------- Replay date helper ----------
-
-function replayDateLabel(sim) {
-  if (!sim) return null
-  const m = sim.meta ?? {}
-  // Prefer explicit replay_date, then generated_at, then null.
-  if (m.replay_date) return m.replay_date
-  if (m.generated_at) return m.generated_at.slice(0, 10)
-  return null
 }
 
 // ---------- Error boundary-ish states ----------
@@ -629,11 +655,15 @@ export default function App() {
   // available, so the list/map keys keep working during loading/errors.
   const zones = (sim?.zones && sim.zones.length) ? sim.zones : data?.zones || []
   const fires = data?.fires || []
-  const aqi = data?.aqi || {}
   const meta = sim?.meta ?? {}
   const durationH = meta.duration_hours ?? 48
   const isReplay = mode === 'replay' || meta.mode === 'replay' || (sim && sim._replay) || false
-  const replayDate = replayDateLabel(sim)
+
+  // Replay must never display Live AQI as historical data: only trust the AQI
+  // payload when it genuinely spans the Replay event window.
+  const aqi = isReplay
+    ? (isReplayAqiPayload(data?.aqi) ? data.aqi : {})
+    : (data?.aqi || {})
 
   // Playback loop.
   // On the very first Play press starting from hour 0, skip ahead to the
@@ -683,7 +713,6 @@ export default function App() {
   }, [frames, hour])
 
   const selected = zones.find((z) => z.id === selectedId) || null
-  const selectedAqi = selected ? aqi[selected.id] : null
 
   const mapPoints = useMemo(
     () => [
@@ -729,7 +758,6 @@ export default function App() {
 
   const topbarMode = mode
   const topbarLabel = mode === 'replay' ? 'Replay' : 'Live'
-  const replayBadgeLabel = 'Replay: past event, 2024-11-01 window'
 
   return (
     <div className="app">
@@ -898,18 +926,19 @@ export default function App() {
             </div>
 
             <div className="masthead-meta">
-              <span>
-                Run based on{' '}
-                <strong className="tabular">
-                  {meta.generated_at
-                    ? meta.generated_at.slice(0, 16).replace('T', ' ')
-                    : 'pending generation'}
-                </strong>
-              </span>
-              {isReplay && replayDate && (
+              {isReplay ? (
                 <span>
                   Replay date ·{' '}
-                  <strong className="tabular">{replayDate}</strong>
+                  <strong className="tabular">{REPLAY_EVENT_WINDOW}</strong>
+                </span>
+              ) : (
+                <span>
+                  Run based on{' '}
+                  <strong className="tabular">
+                    {meta.generated_at
+                      ? meta.generated_at.slice(0, 16).replace('T', ' ')
+                      : 'pending generation'}
+                  </strong>
                 </span>
               )}
             </div>
@@ -921,7 +950,6 @@ export default function App() {
             fires={fires}
             zones={zones}
             isReplay={isReplay}
-            replayDate={replayDate}
           />
 
           {/* Map — focal point */}
@@ -993,7 +1021,7 @@ export default function App() {
 
               <div className="map-overlay-top">
                 <span className={`map-eyebrow ${isReplay ? '' : 'live'}`}>
-                  {isReplay ? 'Historical replay' : 'Live simulation'}
+                  {isReplay ? `Historical replay · ${REPLAY_EVENT_WINDOW}` : 'Live simulation'}
                 </span>
                 {frameForHour && (
                   <span className="map-eyebrow">
@@ -1011,7 +1039,7 @@ export default function App() {
             {isReplay && (
               <div className="replay-badge" aria-label="Replay mode">
                 <span className="pulse" aria-hidden="true" />
-                Replay: past event, 2024-11-01 window
+                Replay: past event · {REPLAY_EVENT_WINDOW}
               </div>
             )}
             <div className="timeline-controls">
@@ -1030,7 +1058,9 @@ export default function App() {
                   height={14}
                   aria-hidden="true"
                 >
-                  <path d="M5 5v14l9-7z" />
+                  {/* Skip-to-start: bar + left-pointing triangle (not a play icon) */}
+                  <path d="M6 5h2.5v14H6z" />
+                  <path d="M18.5 5v14L8.5 12z" />
                 </svg>
               </button>
               <button
@@ -1121,7 +1151,6 @@ export default function App() {
                 zone={selected}
                 aqi={aqi}
                 isReplay={isReplay}
-                replayDate={replayDate}
               />
             </div>
           </div>
@@ -1150,7 +1179,7 @@ export default function App() {
             <strong>Model limitations.</strong> This is a hackathon prototype, not a validated
             atmospheric model. Influence scores are relative comparisons between zones — they are
             not AQI values, and this tool does not predict future air quality.
-            Replay data is historical and labeled as such wherever the backend provides a date.
+            Replay mode is historical data for the fixed 2024 event window ({REPLAY_EVENT_WINDOW}).
           </p>
         </main>
       </div>

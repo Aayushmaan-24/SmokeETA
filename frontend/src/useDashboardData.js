@@ -16,7 +16,7 @@ export function useDashboardData(mode = 'live') {
     setLoading(true)
     setError(null)
 
-    Promise.all([getSim(mode), getFires(), getAqi(), getZones()])
+    Promise.all([getSim(mode), getFires(), getAqi(mode), getZones()])
       .then(([sim, fires, aqi, zones]) => {
         if (cancelled) return
         setData({ sim, fires, aqi, zones })

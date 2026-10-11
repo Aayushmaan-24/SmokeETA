@@ -35,7 +35,8 @@ export async function fetchJsonWithTimeout(path, options = {}, timeoutMs = API_T
 
 export const getSim = (mode = 'live') => fetchJson('/api/sim?mode=' + encodeURIComponent(mode))
 export const getFires = () => fetchJson('/api/fires')
-export const getAqi = () => fetchJson('/api/aqi')
+// AQI is requested per-mode: Replay must never be served the Live payload.
+export const getAqi = (mode = 'live') => fetchJson('/api/aqi?mode=' + encodeURIComponent(mode))
 export const getZones = () => fetchJson('/api/zones')
 export const getHealth = () => fetchJson('/api/health')
 
