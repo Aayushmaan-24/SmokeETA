@@ -101,4 +101,4 @@ Note: on CPU-only machines the agent can take 30 to 40 seconds per answer; the U
 
 ## Team
 
-Pair.exe: Aayushmaan Chakraborty and Ambali Gajinkar.
+Aayushmaan Chakraborty and Ambali Gajinkar.
